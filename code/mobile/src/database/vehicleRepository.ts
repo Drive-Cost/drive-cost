@@ -1,0 +1,110 @@
+import { db } from "./db";
+import { Vehicle } from "../models/Vehicle";
+
+export const addVehicle = async (vehicle: Vehicle): Promise<void> => {
+  await db.runAsync(
+    `INSERT INTO vehicles (
+      brand,
+      model,
+      year,
+      label,
+      fuelType,
+      engine,
+      powerHp,
+      transmission,
+      currentMileage,
+      ownershipStartMileage,
+      trackingStartMileage,
+      currentOdometer
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    vehicle.brand,
+    vehicle.model,
+    vehicle.year,
+    vehicle.label ?? null,
+    vehicle.fuelType ?? null,
+    vehicle.engine ?? null,
+    vehicle.powerHp ?? null,
+    vehicle.transmission ?? null,
+    vehicle.currentOdometer,
+    vehicle.ownershipStartMileage,
+    vehicle.trackingStartMileage,
+    vehicle.currentOdometer,
+  );
+};
+
+export const getVehicles = async (): Promise<Vehicle[]> => {
+  return db.getAllAsync<Vehicle>(`
+    SELECT
+      id,
+      brand,
+      model,
+      year,
+      label,
+      fuelType,
+      engine,
+      powerHp,
+      transmission,
+      ownershipStartMileage,
+      trackingStartMileage,
+      currentOdometer,
+      currentMileage
+    FROM vehicles
+  `);
+};
+
+export const updateVehicleCurrentOdometer = async (
+  vehicleId: number,
+  odometer: number,
+): Promise<void> => {
+  await db.runAsync(
+    `
+      UPDATE vehicles
+      SET currentOdometer = CASE
+        WHEN currentOdometer IS NULL OR currentOdometer < ? THEN ?
+        ELSE currentOdometer
+      END
+      WHERE id = ?
+    `,
+    odometer,
+    odometer,
+    vehicleId,
+  );
+};
+
+export const updateVehicle = async (vehicle: Vehicle): Promise<void> => {
+  if (!vehicle.id) {
+    throw new Error("Vehicle id is required to update a vehicle.");
+  }
+
+  await db.runAsync(
+    `
+      UPDATE vehicles
+      SET brand = ?,
+          model = ?,
+          year = ?,
+          label = ?,
+          fuelType = ?,
+          engine = ?,
+          powerHp = ?,
+          transmission = ?,
+          currentMileage = ?,
+          ownershipStartMileage = ?,
+          trackingStartMileage = ?,
+          currentOdometer = ?
+      WHERE id = ?
+    `,
+    vehicle.brand,
+    vehicle.model,
+    vehicle.year,
+    vehicle.label ?? null,
+    vehicle.fuelType ?? null,
+    vehicle.engine ?? null,
+    vehicle.powerHp ?? null,
+    vehicle.transmission ?? null,
+    vehicle.currentOdometer,
+    vehicle.ownershipStartMileage,
+    vehicle.trackingStartMileage,
+    vehicle.currentOdometer,
+    vehicle.id,
+  );
+};
