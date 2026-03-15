@@ -7,7 +7,6 @@
     "dev": "tsx src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "start:legacy": "node src/index.js",
     "test": "echo \"No backend tests configured yet\""
   },
   "dependencies": {
