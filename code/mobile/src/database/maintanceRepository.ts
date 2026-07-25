@@ -6,8 +6,9 @@ export const addMaintenanceEntry = async (
 ): Promise<void> => {
   await db.runAsync(
     `INSERT INTO maintenance_entries
-      (vehicleId, type, description, cost, date, odometer)
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      (clientId, vehicleId, type, description, cost, date, odometer)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    maintenanceEntry.clientId ?? null,
     maintenanceEntry.vehicleId,
     maintenanceEntry.type,
     maintenanceEntry.description,

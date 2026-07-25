@@ -1,0 +1,50 @@
+# Operating system and editor files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+
+# JavaScript and TypeScript dependencies
+**/node_modules/
+.npm/
+.yarn/
+*.tsbuildinfo
+
+# Local configuration and secrets. Commit documented examples only.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+
+# Logs, diagnostics, and test output
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Generated application output
+**/dist/
+**/build/
+code/mobile/.expo/
+code/mobile/web-build/
+code/mobile/.metro-health-check*
+code/mobile/ios/
+code/mobile/android/
+
+# Local runtime state. Database schema and migrations under code/database remain source.
+code/backend/data/
+code/backend/.test-data/

@@ -3,9 +3,12 @@ import * as SQLite from "expo-sqlite";
 export const db = SQLite.openDatabaseSync("drivecost.db");
 
 export const initDatabase = () => {
+  db.execSync(`PRAGMA foreign_keys = ON;`);
+
   db.execSync(`
     CREATE TABLE IF NOT EXISTS vehicles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      clientId TEXT,
       brand TEXT,
       model TEXT,
       year INTEGER,
@@ -58,6 +61,10 @@ export const initDatabase = () => {
     db.execSync(`ALTER TABLE vehicles ADD COLUMN currentOdometer INTEGER;`);
   }
 
+  if (!columnNames.has("clientId")) {
+    db.execSync(`ALTER TABLE vehicles ADD COLUMN clientId TEXT;`);
+  }
+
   db.execSync(`
     UPDATE vehicles
     SET ownershipStartMileage = COALESCE(ownershipStartMileage, currentMileage, currentOdometer, 0),
@@ -71,6 +78,7 @@ export const initDatabase = () => {
   db.execSync(`
     CREATE TABLE IF NOT EXISTS fuel_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      clientId TEXT,
       vehicleId INTEGER,
       date TEXT,
       liters REAL,
@@ -82,6 +90,7 @@ export const initDatabase = () => {
   db.execSync(`
     CREATE TABLE IF NOT EXISTS maintenance_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      clientId TEXT,
       vehicleId INTEGER,
       type TEXT,
       description TEXT,
@@ -98,7 +107,35 @@ export const initDatabase = () => {
       operation TEXT,
       payload TEXT,
       createdAt TEXT,
-      lastError TEXT
+      lastError TEXT,
+      retryCount INTEGER NOT NULL DEFAULT 0,
+      nextAttemptAt TEXT
     );
   `);
+
+  addColumnIfMissing("fuel_entries", "clientId", "TEXT");
+  addColumnIfMissing("maintenance_entries", "clientId", "TEXT");
+  addColumnIfMissing("sync_queue", "retryCount", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing("sync_queue", "nextAttemptAt", "TEXT");
+
+  // Existing local data predates sync. Assign stable identifiers once so that
+  // future retries and edits target the same remote record.
+  db.execSync(`UPDATE vehicles SET clientId = 'legacy-vehicle-' || id WHERE clientId IS NULL;`);
+  db.execSync(`UPDATE fuel_entries SET clientId = 'legacy-fuel-' || id WHERE clientId IS NULL;`);
+  db.execSync(`UPDATE maintenance_entries SET clientId = 'legacy-maintenance-' || id WHERE clientId IS NULL;`);
+
+  db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicles_client_id ON vehicles(clientId);`);
+  db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_fuel_entries_client_id ON fuel_entries(clientId);`);
+  db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_maintenance_entries_client_id ON maintenance_entries(clientId);`);
+  db.execSync(`CREATE INDEX IF NOT EXISTS idx_fuel_entries_vehicle_date ON fuel_entries(vehicleId, date DESC);`);
+  db.execSync(`CREATE INDEX IF NOT EXISTS idx_maintenance_entries_vehicle_date ON maintenance_entries(vehicleId, date DESC);`);
+  db.execSync(`CREATE INDEX IF NOT EXISTS idx_sync_queue_due ON sync_queue(nextAttemptAt, createdAt, id);`);
 };
+
+function addColumnIfMissing(tableName: string, columnName: string, definition: string) {
+  const columns = db.getAllSync<{ name: string }>(`PRAGMA table_info(${tableName})`);
+
+  if (!columns.some((column) => column.name === columnName)) {
+    db.execSync(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition};`);
+  }
+}

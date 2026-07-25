@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useVehicleStore } from "../store/vehicleStore";
+import { validateVehicleForm } from "../domain/formValidation";
 
 export default function AddVehicleScreen() {
   const navigation = useNavigation();
@@ -16,23 +17,29 @@ export default function AddVehicleScreen() {
   const [powerHp, setPowerHp] = useState("");
   const [transmission, setTransmission] = useState("");
   const [mileage, setMileage] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    const startingOdometer = Number(mileage);
-
-    await createVehicle({
+    const result = validateVehicleForm({
       brand,
       model,
-      year: Number(year),
-      label: label || undefined,
-      fuelType: fuelType || undefined,
-      engine: engine || undefined,
-      powerHp: powerHp ? Number(powerHp) : undefined,
-      transmission: transmission || undefined,
-      ownershipStartMileage: startingOdometer,
-      trackingStartMileage: startingOdometer,
-      currentOdometer: startingOdometer,
+      year,
+      label,
+      fuelType,
+      engine,
+      powerHp,
+      transmission,
+      ownershipStartMileage: mileage,
+      trackingStartMileage: mileage,
+      currentOdometer: mileage,
     });
+
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+
+    await createVehicle(result.value);
 
     navigation.goBack();
   };
@@ -44,6 +51,8 @@ export default function AddVehicleScreen() {
         Start with the essentials. We can layer in richer ownership data after
         the local MVP is stable.
       </Text>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <TextInput
         placeholder="Custom label (optional)"
@@ -154,6 +163,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
     color: "#0f172a",
+  },
+  error: {
+    marginBottom: 12,
+    color: "#b91c1c",
+    lineHeight: 20,
   },
   button: {
     marginTop: 8,

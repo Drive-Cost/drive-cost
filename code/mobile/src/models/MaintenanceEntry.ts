@@ -1,5 +1,6 @@
 export interface MaintenanceEntry {
   id?: number;
+  clientId?: string;
   vehicleId: number;
   type: string;
   description: string;

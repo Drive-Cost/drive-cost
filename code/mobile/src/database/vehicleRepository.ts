@@ -4,6 +4,7 @@ import { Vehicle } from "../models/Vehicle";
 export const addVehicle = async (vehicle: Vehicle): Promise<void> => {
   await db.runAsync(
     `INSERT INTO vehicles (
+      clientId,
       brand,
       model,
       year,
@@ -16,7 +17,8 @@ export const addVehicle = async (vehicle: Vehicle): Promise<void> => {
       ownershipStartMileage,
       trackingStartMileage,
       currentOdometer
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    vehicle.clientId ?? null,
     vehicle.brand,
     vehicle.model,
     vehicle.year,
@@ -36,6 +38,7 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
   return db.getAllAsync<Vehicle>(`
     SELECT
       id,
+      clientId,
       brand,
       model,
       year,
@@ -50,6 +53,17 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
       currentMileage
     FROM vehicles
   `);
+};
+
+export const getVehicleById = async (
+  vehicleId: number,
+): Promise<Vehicle | null> => {
+  const vehicle = await db.getFirstAsync<Vehicle>(
+    `SELECT * FROM vehicles WHERE id = ?`,
+    vehicleId,
+  );
+
+  return vehicle ?? null;
 };
 
 export const updateVehicleCurrentOdometer = async (
@@ -80,6 +94,7 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<void> => {
     `
       UPDATE vehicles
       SET brand = ?,
+          clientId = ?,
           model = ?,
           year = ?,
           label = ?,
@@ -94,6 +109,7 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<void> => {
       WHERE id = ?
     `,
     vehicle.brand,
+    vehicle.clientId ?? null,
     vehicle.model,
     vehicle.year,
     vehicle.label ?? null,

@@ -7,6 +7,7 @@ import {
   updateVehicle,
 } from "../database/vehicleRepository";
 import { queueSyncJob } from "../services/offlineSync";
+import { createClientId } from "../domain/identity";
 
 interface VehicleState {
   vehicles: Vehicle[];
@@ -26,18 +27,19 @@ export const useVehicleStore = create<VehicleState>((set) => ({
   loadVehicles: async () => {
     const vehicles = await getVehicles();
 
-    set({
+    set((state) => ({
       vehicles,
-      activeVehicleId: vehicles.length ? vehicles[0].id : null,
-    });
+      activeVehicleId:
+        state.activeVehicleId && vehicles.some((item) => item.id === state.activeVehicleId)
+          ? state.activeVehicleId
+          : (vehicles[0]?.id ?? null),
+    }));
   },
 
   createVehicle: async (vehicle) => {
-    await addVehicle(vehicle);
-    await queueSyncJob("vehicle", "upsert", {
-      ...vehicle,
-      clientId: `${vehicle.brand}-${vehicle.model}-${Date.now()}`,
-    });
+    const vehicleToCreate = { ...vehicle, clientId: createClientId("vehicle") };
+    await addVehicle(vehicleToCreate);
+    await queueSyncJob("vehicle", "upsert", vehicleToCreate);
     const vehicles = await getVehicles();
 
     set({
@@ -47,11 +49,12 @@ export const useVehicleStore = create<VehicleState>((set) => ({
   },
 
   saveVehicle: async (vehicle) => {
-    await updateVehicle(vehicle);
-    await queueSyncJob("vehicle", "upsert", {
+    const vehicleToSave = {
       ...vehicle,
-      clientId: `vehicle-${vehicle.id}`,
-    });
+      clientId: vehicle.clientId ?? createClientId("vehicle"),
+    };
+    await updateVehicle(vehicleToSave);
+    await queueSyncJob("vehicle", "upsert", vehicleToSave);
     const vehicles = await getVehicles();
 
     set((state) => ({
@@ -65,6 +68,11 @@ export const useVehicleStore = create<VehicleState>((set) => ({
   syncVehicleOdometer: async (vehicleId, odometer) => {
     await updateVehicleCurrentOdometer(vehicleId, odometer);
     const vehicles = await getVehicles();
+
+    const updatedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId);
+    if (updatedVehicle) {
+      await queueSyncJob("vehicle", "upsert", updatedVehicle);
+    }
 
     set((state) => ({
       vehicles,

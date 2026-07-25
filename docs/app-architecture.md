@@ -1,4 +1,4 @@
-# DriveCost — Mobile App Architecture
+# DriveCost Architecture
 
 ## Overview
 
@@ -13,8 +13,9 @@ The architecture prioritizes:
 
 The app stores data locally using SQLite and synchronizes to cloud services in future versions.
 
-The repository may also include a backend module under `code/backend/` once
-sync, accounts, subscriptions, and curated domain data become active work.
+The repository contains a backend module under `code/backend/`. It will grow
+into the account, sync, subscription, and curated-domain-data boundary while
+the mobile database remains immediately usable offline.
 
 ---
 
@@ -45,37 +46,67 @@ Charts (future)
 
 ---
 
-# Folder Structure
+# Repository Structure
 
-mobile/
+```text
+code/
+  mobile/                 Expo application
+  backend/                Fastify API and sync service
+  database/               Shared database notes and future production migrations
+docs/                     Product, architecture, and delivery decisions
+```
 
-backend/
+## Mobile Organization
 
-src/
+Keep React Navigation for now. The current application is small, and changing
+to Expo Router would move files without improving the offline data model. Route
+groups such as `(auth)` and `(tabs)` remain a valid future migration if deep
+links or web parity make file-based routes valuable.
 
-components/  
-Reusable UI components
+New mobile code should move toward feature slices as a feature is touched:
 
-screens/  
-Application screens
+```text
+code/mobile/src/
+  app/                    App bootstrap, providers, and navigation composition
+  features/
+    vehicles/             Screens, store, local repository, and vehicle rules
+    fuel/                 Fuel or charging entry UI and use cases
+    maintenance/          Maintenance entry UI and use cases
+    dashboard/            Read-only projections and dashboard UI
+  shared/
+    ui/                   Reusable presentational components and design tokens
+    domain/               Cross-feature rules such as money and mileage
+    infrastructure/       SQLite bootstrap, sync outbox, and HTTP client
+```
 
-database/  
-SQLite initialization and queries
+Avoid a large mechanical move now. Existing folders continue to work; migrate
+them feature-by-feature when adding tests or changing their behavior. A screen
+coordinates interaction, a store coordinates a use case, a repository owns
+SQLite access, and domain code stays deterministic and UI-independent.
 
-models/  
-TypeScript models
+## Backend Organization
 
-services/  
-Business logic
+Use a modular, layered shape inspired by the strong separation in Gomoku-Web,
+but keep it proportional to DriveCost's size:
 
-store/  
-Global state management
+```text
+code/backend/src/
+  app.ts                  Fastify composition root
+  server.ts               Process startup only
+  config/                 Environment parsing and runtime configuration
+  platform/               Database connection, migrations, HTTP middleware
+  modules/
+    auth/                 Routes, schemas, service, repository, types
+    vehicles/             Routes, schemas, service, repository, types
+    entries/              Routes, schemas, service, repository, types
+    sync/                 Change feed, cursors, conflict policy
+```
 
-navigation/  
-Navigation configuration
-
-backend/src/  
-Future backend modules and APIs
+Route handlers parse requests and map responses. Services enforce use cases and
+authorization. Repositories contain persistence queries only. Modules must not
+reach into another module's repository directly; they collaborate through a
+service contract. This keeps authentication and sync testable as the JSON file
+adapter is replaced by Postgres.
 
 ---
 
@@ -106,7 +137,7 @@ Examples:
 
 ---
 
-## Database
+## Persistence
 
 Responsible for all SQLite queries.
 
@@ -119,7 +150,7 @@ Example files:
 
 ---
 
-## Services
+## Domain And Services
 
 Contains business logic and calculations.
 
@@ -186,3 +217,15 @@ Sync Layer
 ↓
 
 Backend API
+
+## Quality Boundaries
+
+- Models and validation are shared within the mobile app only; do not import
+  mobile persistence models into the backend.
+- API request and response contracts will live in a small versioned shared
+  package only once both sides need the same contract. Do not create a monorepo
+  package prematurely.
+- Database migrations are forward-only and tested against a representative
+  prior schema.
+- The backend treats all mobile payloads as untrusted, even if their TypeScript
+  shapes currently look similar.

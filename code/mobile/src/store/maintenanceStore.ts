@@ -5,6 +5,8 @@ import {
 } from "../database/maintanceRepository";
 import { MaintenanceEntry } from "../models/MaintenanceEntry";
 import { queueSyncJob } from "../services/offlineSync";
+import { createClientId } from "../domain/identity";
+import { getVehicleById } from "../database/vehicleRepository";
 
 interface MaintenanceState {
   maintenanceEntries: MaintenanceEntry[];
@@ -21,10 +23,17 @@ export const useMaintenanceStore = create<MaintenanceState>((set) => ({
   },
 
   createMaintenanceEntry: async (entry) => {
-    await addMaintenanceEntry(entry);
+    const entryToCreate = { ...entry, clientId: createClientId("maintenance") };
+    const vehicle = await getVehicleById(entry.vehicleId);
+
+    if (!vehicle?.clientId) {
+      throw new Error("The vehicle could not be prepared for sync.");
+    }
+
+    await addMaintenanceEntry(entryToCreate);
     await queueSyncJob("maintenance_entry", "create", {
-      ...entry,
-      clientId: `maintenance-${entry.vehicleId}-${entry.date}`,
+      ...entryToCreate,
+      vehicleClientId: vehicle.clientId,
     });
     const entries = await getMaintenanceEntries(entry.vehicleId);
     set({ maintenanceEntries: entries });

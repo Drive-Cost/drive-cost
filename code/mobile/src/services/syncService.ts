@@ -1,6 +1,8 @@
 import { deleteSyncJob, getSyncJobs, markSyncJobError } from "../database/syncRepository";
 import { apiClient } from "./apiClient";
 
+let activeSync: Promise<void> | null = null;
+
 async function syncJob(job: {
   id?: number;
   entityType: string;
@@ -23,7 +25,11 @@ async function syncJob(job: {
   }
 }
 
-export async function processSyncQueue() {
+async function syncQueue() {
+  if (!apiClient.isConfigured || !apiClient.hasSession()) {
+    return;
+  }
+
   const jobs = await getSyncJobs();
 
   for (const job of jobs) {
@@ -41,3 +47,12 @@ export async function processSyncQueue() {
   }
 }
 
+export function processSyncQueue(): Promise<void> {
+  if (!activeSync) {
+    activeSync = syncQueue().finally(() => {
+      activeSync = null;
+    });
+  }
+
+  return activeSync;
+}

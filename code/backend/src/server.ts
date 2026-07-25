@@ -2,8 +2,8 @@ import { createApp } from "./app";
 import { getEnv } from "./config/env";
 
 async function start() {
-  const app = await createApp();
   const env = getEnv();
+  const app = await createApp({ jwtSecret: env.jwtSecret });
 
   try {
     await app.listen({

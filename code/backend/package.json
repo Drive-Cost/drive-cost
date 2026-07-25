@@ -2,15 +2,22 @@
   "name": "drivecost-backend",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
   "description": "Offline-first backend module for DriveCost",
   "scripts": {
     "dev": "tsx src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "test": "echo \"No backend tests configured yet\""
+    "db:migrate": "tsx src/platform/postgres/migrate.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && DRIVECOST_DATA_DIR=.test-data node --test dist/modules/*/*.test.js"
   },
   "dependencies": {
-    "fastify": "^5.2.1"
+    "@fastify/jwt": "^10.2.0",
+    "fastify": "^5.2.1",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

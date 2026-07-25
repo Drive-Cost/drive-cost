@@ -57,42 +57,49 @@ A practical first structure could be:
 
 ## Current State
 
-The backend now has two layers:
+The Fastify module now has a secure development boundary:
 
-- a new TypeScript + Fastify structure for the real backend direction
-- a legacy Node HTTP server kept as a working fallback
+- file-backed JSON persistence in `data/db.json` for local development only
+- signed JWT guest sessions and email/password account registration
+- password hashes derived with Node's `scrypt`
+- authenticated, user-scoped vehicle and entry sync
+- JSON Schema validation before every sync write
+- Fastify integration tests for health and protected vehicle sync
 
-The current implementation is still intentionally minimal:
-
-- file-backed JSON persistence in `data/db.json`
-- health endpoint
-- guest auth placeholder
-- vehicle sync endpoint
-- fuel entry sync endpoint
-- maintenance entry sync endpoint
+Postgres migration infrastructure is also ready. The running API continues to
+use the JSON adapter until its repository port is switched in the next change.
 
 Run it with:
 
 ```bash
 cd code/backend
 npm install
+cp .env.example .env
+# Set JWT_SECRET to a unique 32+ character value.
 npm run dev
 ```
 
-Fallback if dependencies are not installed yet:
+## Local Postgres
+
+Start a local Postgres service and apply the forward-only migrations:
 
 ```bash
 cd code/backend
-npm run start:legacy
+cp .env.example .env
+docker compose up -d postgres
+npm run db:migrate
 ```
+
+The compose file requires `POSTGRES_PASSWORD`; do not use Postgres trust
+authentication outside throwaway experiments.
 
 ## Backend Structure
 
 - `src/server.ts`: Fastify server bootstrap
 - `src/app.ts`: app assembly
 - `src/config`: runtime config
-- `src/lib`: persistence helpers
-- `src/modules/auth`: guest auth today, full auth later
+- `src/lib`: development persistence helpers
+- `src/modules/auth`: guest sessions, registration, login, and password hashing
 - `src/modules/vehicles`: synced vehicle endpoints
 - `src/modules/entries`: synced fuel and maintenance endpoints
 - `src/modules/health`: health and service status
@@ -103,7 +110,7 @@ This structure is designed so the next upgrades can happen without changing the
 mobile sync contract:
 
 - replace file JSON persistence with Postgres
-- add proper account auth
+- add refresh-token rotation, account recovery, and rate limiting
 - add pull sync and conflict resolution
 - add subscription entitlements
 - add curated vehicle catalog and domain data

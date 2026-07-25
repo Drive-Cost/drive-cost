@@ -11,6 +11,7 @@ import { useMaintenanceStore } from "../store/maintenanceStore";
 import { useVehicleStore } from "../store/vehicleStore";
 import { formatCurrency } from "../services/costCalculator";
 import { createMileageSnapshot } from "../services/vehicleUsage";
+import { validateMaintenanceEntryForm } from "../domain/formValidation";
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString("en-GB", {
@@ -29,6 +30,7 @@ export default function MaintenanceScreen() {
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
   const [odometer, setOdometer] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const vehicle = vehicles.find((item) => item.id === activeVehicleId);
   const mileageSnapshot = useMemo(() => {
@@ -43,17 +45,21 @@ export default function MaintenanceScreen() {
 
   const handleSubmit = async () => {
     if (!activeVehicleId) return;
-    const parsedOdometer = Number(odometer);
+    const result = validateMaintenanceEntryForm({ type, cost, odometer });
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
 
     await createMaintenanceEntry({
       vehicleId: activeVehicleId,
-      type,
+      type: result.value.type,
       description,
-      cost: Number(cost),
+      cost: result.value.cost,
       date: new Date().toISOString(),
-      odometer: parsedOdometer,
+      odometer: result.value.odometer,
     });
-    await syncVehicleOdometer(activeVehicleId, parsedOdometer);
+    await syncVehicleOdometer(activeVehicleId, result.value.odometer);
 
     setType("");
     setDescription("");
@@ -76,6 +82,8 @@ export default function MaintenanceScreen() {
         Build your service history for repairs, oil changes, tires, and every
         other ownership cost.
       </Text>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {mileageSnapshot ? (
         <View style={styles.snapshotCard}>
@@ -234,6 +242,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
     color: "#0f172a",
+  },
+  error: {
+    marginBottom: 12,
+    color: "#b91c1c",
+    lineHeight: 20,
   },
   button: {
     marginTop: 8,

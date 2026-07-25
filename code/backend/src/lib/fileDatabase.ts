@@ -1,14 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { DatabaseShape } from "../types/domain";
+import { DatabaseShape, SyncedRecord } from "../types/domain";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.DRIVECOST_DATA_DIR || path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
 
 const defaultDatabase = (): DatabaseShape => ({
   users: [],
-  sessions: [],
   vehicles: [],
   fuelEntries: [],
   maintenanceEntries: [],
@@ -37,27 +36,38 @@ export function createId(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
-export function upsertByClientId<T extends { id: string; clientId: string }>(
-  collection: T[],
+export function upsertByClientId(
+  collection: SyncedRecord[],
   prefix: string,
-  payload: Record<string, unknown>,
-) {
+  userId: string,
+  payload: object,
+): SyncedRecord {
+  const payloadRecord = payload as Record<string, unknown>;
   const clientId =
-    typeof payload.clientId === "string" && payload.clientId.length > 0
-      ? payload.clientId
+    typeof payloadRecord.clientId === "string" && payloadRecord.clientId.length > 0
+      ? payloadRecord.clientId
       : createId(`${prefix}_client`);
 
-  const payloadId = typeof payload.id === "string" ? payload.id : undefined;
   const existingIndex = collection.findIndex(
-    (item) => item.clientId === clientId || item.id === payloadId,
+    (item) => item.userId === userId && item.clientId === clientId,
   );
+  const now = new Date().toISOString();
+  const {
+    id: _id,
+    userId: _userId,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    ...attributes
+  } = payloadRecord;
 
-  const record = {
-    ...payload,
+  const record: SyncedRecord = {
+    ...attributes,
     id: existingIndex >= 0 ? collection[existingIndex].id : createId(prefix),
     clientId,
-    updatedAt: new Date().toISOString(),
-  } as T;
+    userId,
+    createdAt: existingIndex >= 0 ? collection[existingIndex].createdAt : now,
+    updatedAt: now,
+  };
 
   if (existingIndex >= 0) {
     collection[existingIndex] = {
@@ -67,11 +77,11 @@ export function upsertByClientId<T extends { id: string; clientId: string }>(
     return collection[existingIndex];
   }
 
-  const createdRecord = {
-    createdAt: new Date().toISOString(),
-    ...record,
-  } as T;
+  collection.push(record);
+  return record;
+}
 
-  collection.push(createdRecord);
-  return createdRecord;
+export function toPublicSyncedRecord(record: SyncedRecord) {
+  const { userId: _userId, ...publicRecord } = record;
+  return publicRecord;
 }

@@ -19,6 +19,7 @@ import {
   isElectricVehicle,
 } from "../services/vehicleProfile";
 import { createMileageSnapshot } from "../services/vehicleUsage";
+import { validateEnergyEntryForm } from "../domain/formValidation";
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString("en-GB", {
@@ -35,6 +36,7 @@ export default function FuelScreen() {
   const [liters, setLiters] = useState("");
   const [price, setPrice] = useState("");
   const [odometer, setOdometer] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const vehicle = vehicles.find((item) => item.id === activeVehicleId);
   const entryLabel = getEnergyEntryLabel(vehicle);
@@ -51,16 +53,20 @@ export default function FuelScreen() {
 
   const handleAddFuel = async () => {
     if (!activeVehicleId) return;
-    const parsedOdometer = Number(odometer);
+    const result = validateEnergyEntryForm({ quantity: liters, price, odometer });
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
 
     await createFuelEntry({
       vehicleId: activeVehicleId,
       date: new Date().toISOString(),
-      liters: Number(liters),
-      price: Number(price),
-      odometer: parsedOdometer,
+      liters: result.value.quantity,
+      price: result.value.price,
+      odometer: result.value.odometer,
     });
-    await syncVehicleOdometer(activeVehicleId, parsedOdometer);
+    await syncVehicleOdometer(activeVehicleId, result.value.odometer);
 
     setLiters("");
     setPrice("");
@@ -79,6 +85,8 @@ export default function FuelScreen() {
     >
       <Text style={styles.title}>{entryLabel} tracking</Text>
       <Text style={styles.subtitle}>{getEnergyIntroCopy(vehicle)}</Text>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {mileageSnapshot ? (
         <View style={styles.snapshotCard}>
@@ -226,6 +234,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
     color: "#0f172a",
+  },
+  error: {
+    marginBottom: 12,
+    color: "#b91c1c",
+    lineHeight: 20,
   },
   button: {
     marginTop: 8,

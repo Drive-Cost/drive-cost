@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { addFuelEntry, getFuelEntries } from "../database/fuelRepository";
 import { FuelEntry } from "../models/FuelEntry";
 import { queueSyncJob } from "../services/offlineSync";
+import { createClientId } from "../domain/identity";
+import { getVehicleById } from "../database/vehicleRepository";
 
 interface FuelState {
   fuelEntries: FuelEntry[];
@@ -18,10 +20,17 @@ export const useFuelStore = create<FuelState>((set) => ({
   },
 
   createFuelEntry: async (entry) => {
-    await addFuelEntry(entry);
+    const entryToCreate = { ...entry, clientId: createClientId("fuel") };
+    const vehicle = await getVehicleById(entry.vehicleId);
+
+    if (!vehicle?.clientId) {
+      throw new Error("The vehicle could not be prepared for sync.");
+    }
+
+    await addFuelEntry(entryToCreate);
     await queueSyncJob("fuel_entry", "create", {
-      ...entry,
-      clientId: `fuel-${entry.vehicleId}-${entry.date}`,
+      ...entryToCreate,
+      vehicleClientId: vehicle.clientId,
     });
     const entries = await getFuelEntries(entry.vehicleId);
     set({ fuelEntries: entries });

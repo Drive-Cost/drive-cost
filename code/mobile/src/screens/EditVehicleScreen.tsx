@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useVehicleStore } from "../store/vehicleStore";
+import { validateVehicleForm } from "../domain/formValidation";
 
 export default function EditVehicleScreen() {
   const navigation = useNavigation();
@@ -40,23 +41,34 @@ export default function EditVehicleScreen() {
   const [currentOdometer, setCurrentOdometer] = useState(
     vehicle ? String(vehicle.currentOdometer) : "",
   );
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!vehicle?.id) return;
 
-    await saveVehicle({
-      id: vehicle.id,
+    const result = validateVehicleForm({
       brand,
       model,
-      year: Number(year),
-      label: label || undefined,
-      fuelType: fuelType || undefined,
-      engine: engine || undefined,
-      powerHp: powerHp ? Number(powerHp) : undefined,
-      transmission: transmission || undefined,
-      ownershipStartMileage: Number(ownershipStartMileage),
-      trackingStartMileage: Number(trackingStartMileage),
-      currentOdometer: Number(currentOdometer),
+      year,
+      label,
+      fuelType,
+      engine,
+      powerHp,
+      transmission,
+      ownershipStartMileage,
+      trackingStartMileage,
+      currentOdometer,
+    });
+
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+
+    await saveVehicle({
+      id: vehicle.id,
+      clientId: vehicle.clientId,
+      ...result.value,
     });
 
     navigation.goBack();
@@ -80,6 +92,8 @@ export default function EditVehicleScreen() {
         Adjust ownership start, tracking baseline, and current odometer
         separately. This is also where the first layer of domain details lives.
       </Text>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <TextInput
         placeholder="Custom label"
@@ -208,6 +222,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
     color: "#0f172a",
+  },
+  error: {
+    marginBottom: 12,
+    color: "#b91c1c",
+    lineHeight: 20,
   },
   button: {
     marginTop: 8,
