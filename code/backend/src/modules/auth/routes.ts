@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
-import { createId, readDatabase, writeDatabase } from "../../lib/fileDatabase";
+import { createId } from "../../lib/ids";
+import { DriveCostRepository } from "../../platform/persistence/repository";
 import { CredentialsInput, authResponseSchema, credentialsSchema } from "./schemas";
 import { hashPassword, verifyPassword } from "./passwords";
 
@@ -21,17 +22,18 @@ function toAuthResponse(app: FastifyInstance, user: {
   };
 }
 
-export async function registerAuthRoutes(app: FastifyInstance) {
+export async function registerAuthRoutes(
+  app: FastifyInstance,
+  repository: DriveCostRepository,
+) {
   app.post("/auth/guest", { schema: { response: { 201: authResponseSchema } } }, async (_request, reply) => {
-    const database = readDatabase();
     const user = {
       id: createId("user"),
       mode: "guest" as const,
       createdAt: new Date().toISOString(),
     };
 
-    database.users.push(user);
-    writeDatabase(database);
+    await repository.createUser(user);
 
     reply.code(201);
     return toAuthResponse(app, user);
@@ -42,9 +44,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     { schema: { body: credentialsSchema, response: { 201: authResponseSchema } } },
     async (request, reply) => {
       const email = request.body.email.trim().toLowerCase();
-      const database = readDatabase();
-
-      if (database.users.some((user) => user.email === email)) {
+      if (await repository.findUserByEmail(email)) {
         return reply.code(409).send({ error: "email_already_registered" });
       }
 
@@ -55,8 +55,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         passwordHash: await hashPassword(request.body.password),
         createdAt: new Date().toISOString(),
       };
-      database.users.push(user);
-      writeDatabase(database);
+      await repository.createUser(user);
 
       reply.code(201);
       return toAuthResponse(app, user);
@@ -68,12 +67,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     { schema: { body: credentialsSchema, response: { 200: authResponseSchema } } },
     async (request, reply) => {
       const email = request.body.email.trim().toLowerCase();
-      const database = readDatabase();
-      const user = database.users.find(
-        (candidate) => candidate.email === email && candidate.mode === "registered",
-      );
+      const user = await repository.findUserByEmail(email);
 
-      if (!user?.passwordHash || !(await verifyPassword(request.body.password, user.passwordHash))) {
+      if (user?.mode !== "registered" || !user.passwordHash || !(await verifyPassword(request.body.password, user.passwordHash))) {
         return reply.code(401).send({ error: "invalid_credentials" });
       }
 

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import { DatabaseShape, SyncedRecord } from "../types/domain";
+import { createId } from "./ids";
 
 const DATA_DIR = process.env.DRIVECOST_DATA_DIR || path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "db.json");
@@ -30,10 +30,6 @@ export function readDatabase(): DatabaseShape {
 
 export function writeDatabase(database: DatabaseShape) {
   fs.writeFileSync(DB_FILE, JSON.stringify(database, null, 2));
-}
-
-export function createId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID()}`;
 }
 
 export function upsertByClientId(

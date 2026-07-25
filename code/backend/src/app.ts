@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
-import { ensureDatabase } from "./lib/fileDatabase";
+import { FileRepository } from "./platform/persistence/fileRepository";
+import { DriveCostRepository } from "./platform/persistence/repository";
 import { registerHealthRoutes } from "./modules/health/routes";
 import { registerAuthRoutes } from "./modules/auth/routes";
 import { registerVehicleRoutes } from "./modules/vehicles/routes";
@@ -9,10 +10,12 @@ import { registerEntryRoutes } from "./modules/entries/routes";
 interface AppOptions {
   jwtSecret: string;
   logger?: boolean;
+  repository?: DriveCostRepository;
 }
 
-export async function createApp({ jwtSecret, logger = true }: AppOptions) {
-  ensureDatabase();
+export async function createApp({ jwtSecret, logger = true, repository }: AppOptions) {
+  const persistence = repository ?? new FileRepository();
+  await persistence.initialize();
 
   const app = Fastify({
     logger,
@@ -39,9 +42,11 @@ export async function createApp({ jwtSecret, logger = true }: AppOptions) {
   });
 
   await registerHealthRoutes(app);
-  await registerAuthRoutes(app);
-  await registerVehicleRoutes(app);
-  await registerEntryRoutes(app);
+  await registerAuthRoutes(app, persistence);
+  await registerVehicleRoutes(app, persistence);
+  await registerEntryRoutes(app, persistence);
+
+  app.addHook("onClose", async () => persistence.close());
 
   return app;
 }

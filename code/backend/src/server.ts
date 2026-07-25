@@ -1,9 +1,15 @@
 import { createApp } from "./app";
 import { getEnv } from "./config/env";
+import { FileRepository } from "./platform/persistence/fileRepository";
+import { PostgresRepository } from "./platform/persistence/postgresRepository";
 
 async function start() {
   const env = getEnv();
-  const app = await createApp({ jwtSecret: env.jwtSecret });
+  const repository =
+    env.persistenceDriver === "postgres"
+      ? new PostgresRepository(env.databaseUrl!)
+      : new FileRepository();
+  const app = await createApp({ jwtSecret: env.jwtSecret, repository });
 
   try {
     await app.listen({

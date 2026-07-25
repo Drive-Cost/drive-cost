@@ -1,19 +1,11 @@
 import { FastifyInstance } from "fastify";
-import {
-  readDatabase,
-  toPublicSyncedRecord,
-  upsertByClientId,
-  writeDatabase,
-} from "../../lib/fileDatabase";
+import { DriveCostRepository, toPublicRecord } from "../../platform/persistence/repository";
 import { VehicleSyncInput, vehicleSyncSchema } from "./schemas";
 
-export async function registerVehicleRoutes(app: FastifyInstance) {
+export async function registerVehicleRoutes(app: FastifyInstance, repository: DriveCostRepository) {
   app.get("/vehicles", { onRequest: [app.authenticate] }, async (request) => {
-    const database = readDatabase();
     return {
-      data: database.vehicles
-        .filter((vehicle) => vehicle.userId === request.user.sub)
-        .map(toPublicSyncedRecord),
+      data: (await repository.listEntities(request.user.sub, "vehicle")).map(toPublicRecord),
     };
   });
 
@@ -28,17 +20,12 @@ export async function registerVehicleRoutes(app: FastifyInstance) {
         return reply.code(422).send({ error: "invalid_mileage_baseline" });
       }
 
-      const database = readDatabase();
-      const record = upsertByClientId(
-        database.vehicles,
-        "vehicle",
-        request.user.sub,
-        request.body,
+      const record = await repository.upsertEntity(
+        request.user.sub, "vehicle", request.body,
       );
-      writeDatabase(database);
 
       reply.code(201);
-      return { data: toPublicSyncedRecord(record) };
+      return { data: toPublicRecord(record) };
     },
   );
 }

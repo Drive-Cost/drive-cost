@@ -39,7 +39,9 @@ Status: in progress.
 - [x] Authenticate and user-scope sync writes and reads.
 - [x] Validate backend request payloads with JSON Schema.
 - [x] Add forward-only Postgres migrations and local Compose infrastructure.
-- [ ] Move the running repository adapter from JSON files to Postgres.
+- [x] Add a storage port with file and Postgres adapters.
+- [x] Select the Postgres adapter through runtime configuration.
+- [ ] Add Compose-backed Postgres integration tests to CI.
 - [ ] Add refresh-token rotation, account recovery, rate limits, and email verification.
 - Introduce an idempotent changes API with cursor-based pull sync and conflict
   metadata.

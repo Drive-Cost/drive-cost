@@ -66,8 +66,9 @@ The Fastify module now has a secure development boundary:
 - JSON Schema validation before every sync write
 - Fastify integration tests for health and protected vehicle sync
 
-Postgres migration infrastructure is also ready. The running API continues to
-use the JSON adapter until its repository port is switched in the next change.
+The running API selects its persistence adapter through `PERSISTENCE_DRIVER`.
+Use `file` for local development with the JSON adapter, or `postgres` with a
+migrated `DATABASE_URL` for the production storage path.
 
 Run it with:
 
@@ -89,6 +90,8 @@ cp .env.example .env
 docker compose up -d postgres
 npm run db:migrate
 ```
+
+Set `PERSISTENCE_DRIVER=postgres` before starting the API to use this database.
 
 The compose file requires `POSTGRES_PASSWORD`; do not use Postgres trust
 authentication outside throwaway experiments.
