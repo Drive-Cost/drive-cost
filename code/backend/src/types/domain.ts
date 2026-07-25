@@ -27,7 +27,18 @@ export type SyncedMaintenanceEntryRecord = SyncedRecord;
 
 export interface DatabaseShape {
   users: UserRecord[];
+  syncChanges: SyncChange[];
   vehicles: SyncedVehicleRecord[];
   fuelEntries: SyncedFuelEntryRecord[];
   maintenanceEntries: SyncedMaintenanceEntryRecord[];
+}
+
+export interface SyncChange {
+  sequence: number;
+  userId: string;
+  entityType: "vehicle" | "fuel_entry" | "maintenance_entry";
+  entityId: string;
+  clientId: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
 }

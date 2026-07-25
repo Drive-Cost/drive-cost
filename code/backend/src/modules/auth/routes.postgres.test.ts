@@ -67,6 +67,27 @@ test(
       assert.equal(storedVehicle.id, created.json().data.id);
       assert.match(storedVehicle.createdAt as string, /^\d{4}-\d{2}-\d{2}T/);
       assert.match(storedVehicle.updatedAt as string, /^\d{4}-\d{2}-\d{2}T/);
+
+      const firstPull = await app.inject({
+        method: "GET",
+        url: "/sync?after=0",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      assert.equal(firstPull.statusCode, 200);
+      const firstPullBody = firstPull.json();
+      assert.equal(firstPullBody.data.length, 2);
+      assert.equal(firstPullBody.data.at(-1).payload.currentOdometer, 18500);
+
+      const secondPull = await app.inject({
+        method: "GET",
+        url: `/sync?after=${firstPullBody.nextCursor}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      assert.equal(secondPull.statusCode, 200);
+      assert.deepEqual(secondPull.json(), {
+        data: [],
+        nextCursor: firstPullBody.nextCursor,
+      });
     } finally {
       await app.close();
     }

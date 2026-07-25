@@ -6,6 +6,7 @@ import { registerHealthRoutes } from "./modules/health/routes";
 import { registerAuthRoutes } from "./modules/auth/routes";
 import { registerVehicleRoutes } from "./modules/vehicles/routes";
 import { registerEntryRoutes } from "./modules/entries/routes";
+import { registerSyncRoutes } from "./modules/sync/routes";
 
 interface AppOptions {
   jwtSecret: string;
@@ -45,6 +46,7 @@ export async function createApp({ jwtSecret, logger = true, repository }: AppOpt
   await registerAuthRoutes(app, persistence);
   await registerVehicleRoutes(app, persistence);
   await registerEntryRoutes(app, persistence);
+  await registerSyncRoutes(app, persistence);
 
   app.addHook("onClose", async () => persistence.close());
 

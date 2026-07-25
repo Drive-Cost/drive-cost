@@ -1,6 +1,6 @@
 import postgres, { Sql } from "postgres";
 import { createId } from "../../lib/ids";
-import { SyncedRecord, UserRecord } from "../../types/domain";
+import { SyncChange, SyncedRecord, UserRecord } from "../../types/domain";
 import { DriveCostRepository, SyncEntityType } from "./repository";
 
 interface EntityRow {
@@ -88,7 +88,22 @@ export class PostgresRepository implements DriveCostRepository {
     `;
 
     if (!row) throw new Error("Postgres upsert did not return a record.");
+    await this.sql`
+      INSERT INTO sync_changes (user_id, entity_type, entity_id, client_id, payload)
+      VALUES (${userId}, ${entityType}, ${row.id}, ${clientId}, ${this.sql.json(attributes as Parameters<Sql["json"]>[0])})
+    `;
     return toSyncedRecord(row);
+  }
+
+  async listChanges(userId: string, after: number, limit: number): Promise<SyncChange[]> {
+    const rows = await this.sql<SyncChange[]>`
+      SELECT sequence, user_id, entity_type, entity_id, client_id, payload, created_at
+      FROM sync_changes
+      WHERE user_id = ${userId} AND sequence > ${after}
+      ORDER BY sequence ASC
+      LIMIT ${limit}
+    `;
+    return rows.map((row) => ({ ...row, createdAt: new Date(row.createdAt).toISOString() }));
   }
 
   async close(): Promise<void> {

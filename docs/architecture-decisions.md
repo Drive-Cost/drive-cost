@@ -70,3 +70,11 @@ Redis may be added for ephemeral caching, rate limits, or short-lived jobs, and
 RabbitMQ only when asynchronous workloads justify an external broker. Neither
 is a replacement for the primary database. Cassandra and CouchDB add operating
 and consistency complexity without solving a demonstrated DriveCost need.
+
+## ADR-010: Pull Sync Uses An Append-Only Cursor Feed
+
+Each accepted Postgres upsert will emit a user-scoped change with a monotonic
+cursor. Clients request changes after their last cursor and apply them in order.
+For the current single-owner vehicle model, the server uses last-write-wins for
+the same user, entity type, and client ID. Deletions and shared-vehicle editing
+are intentionally deferred until they have explicit tombstone and conflict UX.

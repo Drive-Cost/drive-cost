@@ -1,4 +1,4 @@
-import { SyncedRecord, UserRecord } from "../../types/domain";
+import { SyncChange, SyncedRecord, UserRecord } from "../../types/domain";
 
 export type SyncEntityType =
   | "vehicle"
@@ -20,6 +20,7 @@ export interface DriveCostRepository {
     entityType: SyncEntityType,
     payload: object,
   ): Promise<SyncedRecord>;
+  listChanges(userId: string, after: number, limit: number): Promise<SyncChange[]>;
   close(): Promise<void>;
 }
 

@@ -4,7 +4,7 @@ import {
   upsertByClientId,
   writeDatabase,
 } from "../../lib/fileDatabase";
-import { DatabaseShape, SyncedRecord, UserRecord } from "../../types/domain";
+import { DatabaseShape, SyncChange, SyncedRecord, UserRecord } from "../../types/domain";
 import { DriveCostRepository, SyncEntityType } from "./repository";
 
 const collectionByEntityType: Record<SyncEntityType, keyof Pick<
@@ -68,8 +68,23 @@ export class FileRepository implements DriveCostRepository {
       userId,
       payload,
     );
+    database.syncChanges.push({
+      sequence: database.syncChanges.length + 1,
+      userId,
+      entityType,
+      entityId: record.id,
+      clientId: record.clientId,
+      payload: payload as Record<string, unknown>,
+      createdAt: record.updatedAt,
+    });
     writeDatabase(database);
     return record;
+  }
+
+  async listChanges(userId: string, after: number, limit: number): Promise<SyncChange[]> {
+    return readDatabase().syncChanges
+      .filter((change) => change.userId === userId && change.sequence > after)
+      .slice(0, limit);
   }
 
   async close(): Promise<void> {}

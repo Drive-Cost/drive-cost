@@ -8,6 +8,7 @@ const DB_FILE = path.join(DATA_DIR, "db.json");
 
 const defaultDatabase = (): DatabaseShape => ({
   users: [],
+  syncChanges: [],
   vehicles: [],
   fuelEntries: [],
   maintenanceEntries: [],
@@ -25,7 +26,12 @@ export function ensureDatabase() {
 
 export function readDatabase(): DatabaseShape {
   ensureDatabase();
-  return JSON.parse(fs.readFileSync(DB_FILE, "utf8")) as DatabaseShape;
+  const database = JSON.parse(fs.readFileSync(DB_FILE, "utf8")) as Partial<DatabaseShape>;
+  return {
+    ...defaultDatabase(),
+    ...database,
+    syncChanges: database.syncChanges ?? [],
+  };
 }
 
 export function writeDatabase(database: DatabaseShape) {
