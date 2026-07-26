@@ -33,6 +33,25 @@ async function postJson(path: string, payload: unknown) {
   return response.json();
 }
 
+async function getJson(path: string) {
+  if (!API_BASE_URL) throw new Error("Sync is not configured.");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+  return response.json();
+}
+
 function withoutLocalFields(payload: unknown): unknown {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return payload;
@@ -71,4 +90,5 @@ export const apiClient = {
     postJson("/fuel-entries", withoutLocalFields(payload)),
   syncMaintenanceEntry: (payload: unknown) =>
     postJson("/maintenance-entries", withoutLocalFields(payload)),
+  pullChanges: (after: number) => getJson(`/sync?after=${after}`),
 };

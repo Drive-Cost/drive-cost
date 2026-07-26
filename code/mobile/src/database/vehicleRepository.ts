@@ -1,5 +1,7 @@
 import { db } from "./db";
 import { Vehicle } from "../models/Vehicle";
+import { VehicleSyncPayload } from "../domain/sync";
+import * as SQLite from "expo-sqlite";
 
 export const addVehicle = async (vehicle: Vehicle): Promise<void> => {
   await db.runAsync(
@@ -122,5 +124,46 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<void> => {
     vehicle.trackingStartMileage,
     vehicle.currentOdometer,
     vehicle.id,
+  );
+};
+
+export const upsertVehicleFromSync = async (
+  vehicle: VehicleSyncPayload,
+  database: SQLite.SQLiteDatabase = db,
+): Promise<void> => {
+  await database.runAsync(
+    `
+      INSERT INTO vehicles (
+        clientId, brand, model, year, label, fuelType, engine, powerHp,
+        transmission, currentMileage, ownershipStartMileage,
+        trackingStartMileage, currentOdometer
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(clientId) DO UPDATE SET
+        brand = excluded.brand,
+        model = excluded.model,
+        year = excluded.year,
+        label = excluded.label,
+        fuelType = excluded.fuelType,
+        engine = excluded.engine,
+        powerHp = excluded.powerHp,
+        transmission = excluded.transmission,
+        currentMileage = excluded.currentMileage,
+        ownershipStartMileage = excluded.ownershipStartMileage,
+        trackingStartMileage = excluded.trackingStartMileage,
+        currentOdometer = excluded.currentOdometer
+    `,
+    vehicle.clientId,
+    vehicle.brand,
+    vehicle.model,
+    vehicle.year,
+    vehicle.label ?? null,
+    vehicle.fuelType ?? null,
+    vehicle.engine ?? null,
+    vehicle.powerHp ?? null,
+    vehicle.transmission ?? null,
+    vehicle.currentOdometer,
+    vehicle.ownershipStartMileage,
+    vehicle.trackingStartMileage,
+    vehicle.currentOdometer,
   );
 };

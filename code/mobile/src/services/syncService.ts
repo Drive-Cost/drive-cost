@@ -1,7 +1,9 @@
 import { deleteSyncJob, getSyncJobs, markSyncJobError } from "../database/syncRepository";
 import { apiClient } from "./apiClient";
+import { pullRemoteChanges } from "./pullSync";
 
 let activeSync: Promise<void> | null = null;
+const remoteChangeListeners = new Set<(appliedChanges: number) => Promise<void>>();
 
 async function syncJob(job: {
   id?: number;
@@ -45,6 +47,20 @@ async function syncQueue() {
       break;
     }
   }
+
+  const appliedChanges = await pullRemoteChanges();
+  if (appliedChanges > 0) {
+    await Promise.all(
+      [...remoteChangeListeners].map((listener) => listener(appliedChanges)),
+    );
+  }
+}
+
+export function subscribeToRemoteChanges(
+  listener: (appliedChanges: number) => Promise<void>,
+): () => void {
+  remoteChangeListeners.add(listener);
+  return () => remoteChangeListeners.delete(listener);
 }
 
 export function processSyncQueue(): Promise<void> {

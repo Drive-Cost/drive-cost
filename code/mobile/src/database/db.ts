@@ -113,6 +113,13 @@ export const initDatabase = () => {
     );
   `);
 
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS sync_state (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+
   addColumnIfMissing("fuel_entries", "clientId", "TEXT");
   addColumnIfMissing("maintenance_entries", "clientId", "TEXT");
   addColumnIfMissing("sync_queue", "retryCount", "INTEGER NOT NULL DEFAULT 0");

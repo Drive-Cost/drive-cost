@@ -42,9 +42,10 @@ Status: in progress.
 - [x] Add a storage port with file and Postgres adapters.
 - [x] Select the Postgres adapter through runtime configuration.
 - [x] Add Compose-backed Postgres integration tests to CI.
+- [x] Add an idempotent changes API with cursor-based pull sync and a
+  last-write-wins conflict policy.
+- [x] Reconcile cursor batches atomically into SQLite without touching the local outbox.
 - [ ] Add refresh-token rotation, account recovery, rate limits, and email verification.
-- [ ] Introduce an idempotent changes API with cursor-based pull sync and conflict
-  metadata.
 - Add backup/restore, observability, rate limits, and encrypted secrets.
 - Integrate subscriptions only after the local retention loop is proven.
 

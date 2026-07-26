@@ -90,7 +90,7 @@ export class PostgresRepository implements DriveCostRepository {
     if (!row) throw new Error("Postgres upsert did not return a record.");
     await this.sql`
       INSERT INTO sync_changes (user_id, entity_type, entity_id, client_id, payload)
-      VALUES (${userId}, ${entityType}, ${row.id}, ${clientId}, ${this.sql.json(attributes as Parameters<Sql["json"]>[0])})
+      VALUES (${userId}, ${entityType}, ${row.id}, ${clientId}, ${this.sql.json({ clientId, ...attributes } as Parameters<Sql["json"]>[0])})
     `;
     return toSyncedRecord(row);
   }
@@ -103,12 +103,31 @@ export class PostgresRepository implements DriveCostRepository {
       ORDER BY sequence ASC
       LIMIT ${limit}
     `;
-    return rows.map((row) => ({ ...row, createdAt: new Date(row.createdAt).toISOString() }));
+    return rows.map((row) => ({
+      ...row,
+      sequence: toSafeCursor(row.sequence),
+      createdAt: new Date(row.createdAt).toISOString(),
+    }));
   }
 
   async close(): Promise<void> {
     await this.sql.end();
   }
+}
+
+function toSafeCursor(value: unknown): number {
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    (typeof value === "string" && !/^\d+$/.test(value))
+  ) {
+    throw new Error("Postgres returned an unsupported sync cursor.");
+  }
+
+  const cursor = Number(value);
+  if (!Number.isSafeInteger(cursor) || cursor < 0) {
+    throw new Error("Postgres returned an unsupported sync cursor.");
+  }
+  return cursor;
 }
 
 function splitPayload(payload: object) {

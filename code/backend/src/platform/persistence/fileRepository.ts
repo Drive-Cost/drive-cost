@@ -62,6 +62,7 @@ export class FileRepository implements DriveCostRepository {
     payload: object,
   ): Promise<SyncedRecord> {
     const database = readDatabase();
+    const { clientId: _clientId, ...attributes } = payload as Record<string, unknown>;
     const record = upsertByClientId(
       this.collection(database, entityType),
       idPrefixByEntityType[entityType],
@@ -74,7 +75,7 @@ export class FileRepository implements DriveCostRepository {
       entityType,
       entityId: record.id,
       clientId: record.clientId,
-      payload: payload as Record<string, unknown>,
+      payload: { clientId: record.clientId, ...attributes },
       createdAt: record.updatedAt,
     });
     writeDatabase(database);

@@ -61,6 +61,15 @@ test("registered users can sync only validated, owned vehicle data", async () =>
     });
     assert.equal(vehicles.statusCode, 200);
     assert.equal(vehicles.json().data.length, 1);
+
+    const changes = await app.inject({
+      method: "GET",
+      url: "/sync?after=0",
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(changes.statusCode, 200);
+    assert.equal(changes.json().data[0].clientId, "vehicle_1");
+    assert.equal(changes.json().data[0].payload.clientId, "vehicle_1");
   } finally {
     await app.close();
   }
