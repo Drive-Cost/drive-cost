@@ -17,11 +17,12 @@ Status: in progress.
 - [x] Add local schema migration helpers and indexes for primary query paths.
 - [x] Stop assuming a localhost backend exists in every installed app.
 - [x] Add type-check commands for the mobile and backend modules.
-- [ ] Validate form input and odometer invariants before a database write.
+- [x] Validate form input and odometer invariants before a database write.
 - [ ] Replace untyped navigation and unsafe casts with typed route parameters.
 - [x] Add unit tests for cost calculations and form validation.
 - [x] Add CI to run type checks and tests on every pull request.
-- [ ] Add deterministic sync retry and migration tests without requiring Expo runtime.
+- [x] Add deterministic sync retry policy tests without requiring Expo runtime.
+- [ ] Commit a local write and its outbox job in one SQLite transaction.
 
 ## Phase 2: Honest Local Product
 
@@ -46,6 +47,9 @@ Status: in progress.
 - [x] Add an idempotent changes API with cursor-based pull sync and a
   last-write-wins conflict policy.
 - [x] Reconcile cursor batches atomically into SQLite without touching the local outbox.
+- [x] Share typed sync and Problem Details contracts between mobile and backend.
+- [x] Write Postgres entity upserts and change-feed records in one transaction.
+- [x] Return RFC 9457 Problem Details for validation, authentication, conflict, and server failures.
 - [ ] Add refresh-token rotation, account recovery, rate limits, and email verification.
 - Add backup/restore, observability, rate limits, and encrypted secrets.
 - Integrate subscriptions only after the local retention loop is proven.
@@ -55,3 +59,7 @@ Status: in progress.
 The backend is ready for a private beta when an authenticated user can create a
 vehicle and entries offline, reopen the app, sync them on two devices, and see
 the same result without duplicates or lost edits.
+
+It is not production-ready until account recovery, token rotation, rate
+limiting, remote deletion semantics, monitoring, and atomic local
+write-plus-outbox persistence are in place.
