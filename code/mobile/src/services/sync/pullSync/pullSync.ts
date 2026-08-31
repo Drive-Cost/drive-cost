@@ -1,10 +1,10 @@
-import { db } from "../database/db";
-import { getPullCursor, setPullCursor } from "../database/syncStateRepository";
-import { upsertVehicleFromSync } from "../database/vehicleRepository";
-import { upsertFuelEntryFromSync } from "../database/fuelRepository";
-import { upsertMaintenanceEntryFromSync } from "../database/maintanceRepository";
-import { RemoteChange } from "../domain/sync";
-import { apiClient } from "./apiClient";
+import { db } from "../../../database/db";
+import { getPullCursor, setPullCursor } from "../../../database/syncStateRepository";
+import { upsertVehicleFromSync } from "../../../database/vehicleRepository";
+import { upsertFuelEntryFromSync } from "../../../database/fuelRepository";
+import { upsertMaintenanceEntryFromSync } from "../../../database/maintenanceRepository";
+import { RemoteChange } from "../../../domain/sync";
+import { apiClient } from "../apiClient";
 import { reconcilePulledChanges } from "./pullSyncEngine";
 
 export async function pullRemoteChanges(): Promise<number> {

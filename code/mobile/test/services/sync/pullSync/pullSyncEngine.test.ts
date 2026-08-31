@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { RemoteChange } from "../domain/sync";
-import { PullSyncDependencies, reconcilePulledChanges } from "./pullSyncEngine";
+import { RemoteChange } from "../../../../src/domain/sync";
+import {
+  PullSyncDependencies,
+  reconcilePulledChanges,
+} from "../../../../src/services/sync/pullSync/pullSyncEngine";
 
 interface MemoryTransaction {
   readonly marker: "transaction";

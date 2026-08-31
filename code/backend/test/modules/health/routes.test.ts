@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createApp } from "../../app";
+import { createApp } from "../../../src/app";
 
 test("health endpoint reports a ready backend", async () => {
   const app = await createApp({

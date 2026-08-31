@@ -2,9 +2,9 @@ import { create } from "zustand";
 import {
   addMaintenanceEntry,
   getMaintenanceEntries,
-} from "../database/maintanceRepository";
+} from "../database/maintenanceRepository";
 import { MaintenanceEntry } from "../models/MaintenanceEntry";
-import { queueSyncJob } from "../services/offlineSync";
+import { queueSyncJob } from "../services/sync/offlineSync";
 import { createClientId } from "../domain/identity";
 import { getVehicleById } from "../database/vehicleRepository";
 

@@ -11,9 +11,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "db:migrate": "tsx src/platform/postgres/migrate.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run build && DRIVECOST_DATA_DIR=.test-data node --test dist/modules/*/*.test.js",
-    "test:postgres": "npm run build && npm run db:migrate && node --test dist/modules/auth/routes.postgres.test.js"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "DRIVECOST_DATA_DIR=.test-data node --import tsx --test 'test/**/*.test.ts'",
+    "test:postgres": "npm run db:migrate && node --import tsx --test test/modules/auth/routes.postgres.test.ts"
   },
   "dependencies": {
     "@fastify/jwt": "^10.2.0",

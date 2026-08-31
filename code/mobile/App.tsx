@@ -5,8 +5,7 @@ import { useEffect } from "react";
 import { useVehicleStore } from "./src/store/vehicleStore";
 import { useFuelStore } from "./src/store/fuelStore";
 import { useMaintenanceStore } from "./src/store/maintenanceStore";
-import { processSyncQueue, subscribeToRemoteChanges } from "./src/services/syncService";
-import { initializeAuthSession } from "./src/services/authSession";
+import { subscribeToRemoteChanges, syncDevice } from "./src/services/sync/syncService";
 
 export default function App() {
   const { loadVehicles } = useVehicleStore();
@@ -29,8 +28,7 @@ export default function App() {
       await loadVehicles();
 
       try {
-        await initializeAuthSession();
-        await processSyncQueue();
+        await syncDevice();
       } catch {
         // Offline boot is expected; queued changes remain local.
       }

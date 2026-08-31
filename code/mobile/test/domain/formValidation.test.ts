@@ -3,7 +3,7 @@ import {
   validateEnergyEntryForm,
   validateMaintenanceEntryForm,
   validateVehicleForm,
-} from "./formValidation";
+} from "../../src/domain/formValidation";
 
 const validVehicle = {
   brand: "Toyota",

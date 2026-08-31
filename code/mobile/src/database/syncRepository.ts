@@ -1,8 +1,9 @@
 import { db } from "./db";
+import { SyncEntityType } from "../domain/sync";
 
 export interface SyncJob {
   id?: number;
-  entityType: string;
+  entityType: SyncEntityType;
   operation: string;
   payload: string;
   createdAt: string;

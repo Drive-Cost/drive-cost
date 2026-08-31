@@ -9,8 +9,8 @@ import {
 } from "react-native";
 import { useMaintenanceStore } from "../store/maintenanceStore";
 import { useVehicleStore } from "../store/vehicleStore";
-import { formatCurrency } from "../services/costCalculator";
-import { createMileageSnapshot } from "../services/vehicleUsage";
+import { formatCurrency } from "../services/vehicle/costCalculator";
+import { createMileageSnapshot } from "../services/vehicle/vehicleUsage";
 import { validateMaintenanceEntryForm } from "../domain/formValidation";
 
 function formatDate(value: string) {

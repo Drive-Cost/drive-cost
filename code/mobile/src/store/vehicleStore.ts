@@ -6,7 +6,7 @@ import {
   updateVehicleCurrentOdometer,
   updateVehicle,
 } from "../database/vehicleRepository";
-import { queueSyncJob } from "../services/offlineSync";
+import { queueSyncJob } from "../services/sync/offlineSync";
 import { createClientId } from "../domain/identity";
 
 interface VehicleState {

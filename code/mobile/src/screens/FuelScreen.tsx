@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useFuelStore } from "../store/fuelStore";
 import { useVehicleStore } from "../store/vehicleStore";
-import { formatCurrency } from "../services/costCalculator";
+import { formatCurrency } from "../services/vehicle/costCalculator";
 import {
   getEnergyEntryLabel,
   getEnergyHistoryEmptyState,
@@ -17,8 +17,8 @@ import {
   getEnergyIntroCopy,
   getEnergyUnitLabel,
   isElectricVehicle,
-} from "../services/vehicleProfile";
-import { createMileageSnapshot } from "../services/vehicleUsage";
+} from "../services/vehicle/vehicleProfile";
+import { createMileageSnapshot } from "../services/vehicle/vehicleUsage";
 import { validateEnergyEntryForm } from "../domain/formValidation";
 
 function formatDate(value: string) {

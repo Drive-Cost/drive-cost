@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { addFuelEntry, getFuelEntries } from "../database/fuelRepository";
 import { FuelEntry } from "../models/FuelEntry";
-import { queueSyncJob } from "../services/offlineSync";
+import { queueSyncJob } from "../services/sync/offlineSync";
 import { createClientId } from "../domain/identity";
 import { getVehicleById } from "../database/vehicleRepository";
 

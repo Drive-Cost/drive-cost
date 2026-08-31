@@ -24,11 +24,15 @@ Tracking
 - EV charging entries using the same local flow
 - maintenance entries
 
+Sync
+
+- local outbox with optional authenticated backup and two-device sync
+- clear local-only, waiting, syncing, synced, and recoverable-error states
+
 ## Not included yet
 
 - analytics
 - charts
-- cloud sync
 - subscriptions
 - cross-device accounts
 - external vehicle data integrations

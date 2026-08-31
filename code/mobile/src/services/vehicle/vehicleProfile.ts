@@ -1,4 +1,4 @@
-import { Vehicle } from "../models/Vehicle";
+import { Vehicle } from "../../models/Vehicle";
 
 function normalizeFuelType(fuelType?: string) {
   return fuelType?.trim().toLowerCase() ?? "";

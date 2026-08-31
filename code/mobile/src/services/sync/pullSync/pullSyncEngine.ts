@@ -1,4 +1,4 @@
-import { PullResponse, RemoteChange } from "../domain/sync";
+import { PullResponse, RemoteChange } from "../../../domain/sync";
 
 export interface PullSyncDependencies<Transaction> {
   getCursor: () => Promise<number>;

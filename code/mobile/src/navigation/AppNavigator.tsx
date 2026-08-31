@@ -3,7 +3,7 @@ import { Text } from "react-native";
 import DashboardScreen from "../screens/DashboardScreen";
 import GarageStack from "./GarageStack";
 import FuelScreen from "../screens/FuelScreen";
-import MaintenanceScreen from "../screens/MaintenacesScreen";
+import MaintenanceScreen from "../screens/MaintenanceScreen";
 
 const Tab = createBottomTabNavigator();
 

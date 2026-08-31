@@ -1,23 +1,26 @@
 import { useEffect } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import CostSummaryCards from "../components/CostSummaryCards";
+import SyncStatusCard from "../components/SyncStatusCard";
 import { useFuelStore } from "../store/fuelStore";
 import { useMaintenanceStore } from "../store/maintenanceStore";
 import { useVehicleStore } from "../store/vehicleStore";
+import { useSyncStore } from "../store/syncStore";
+import { syncDevice } from "../services/sync/syncService";
 import {
   calculateCostPerKm,
   calculateTotalFuelCost,
   calculateTotalMaintenanceCost,
   formatCostPerKm,
   formatCurrency,
-} from "../services/costCalculator";
+} from "../services/vehicle/costCalculator";
 import {
   getEnergyCostLabel,
   getEnergyEventTitle,
   isElectricVehicle,
-} from "../services/vehicleProfile";
-import { buildVehicleInsights } from "../services/vehicleInsights";
-import { createMileageSnapshot } from "../services/vehicleUsage";
+} from "../services/vehicle/vehicleProfile";
+import { buildVehicleInsights } from "../services/vehicle/vehicleInsights";
+import { createMileageSnapshot } from "../services/vehicle/vehicleUsage";
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString("en-GB", {
@@ -31,6 +34,7 @@ export default function DashboardScreen() {
   const { vehicles, activeVehicleId } = useVehicleStore();
   const { fuelEntries, loadFuelEntries } = useFuelStore();
   const { maintenanceEntries, loadMaintenanceEntries } = useMaintenanceStore();
+  const syncStatus = useSyncStore();
 
   const vehicle = vehicles.find((item) => item.id === activeVehicleId);
 
@@ -115,6 +119,13 @@ export default function DashboardScreen() {
           {mileageSnapshot.trackingStartMileage.toLocaleString()} km
         </Text>
       </View>
+
+      <SyncStatusCard
+        status={syncStatus}
+        onRetry={() => {
+          void syncDevice().catch(() => undefined);
+        }}
+      />
 
       <Text style={styles.sectionTitle}>Cost overview</Text>
 

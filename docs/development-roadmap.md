@@ -26,7 +26,8 @@ Status: in progress.
 ## Phase 2: Honest Local Product
 
 - Add edit and delete flows for fuel and maintenance entries.
-- Show useful empty states, recoverable form errors, and sync status.
+- [x] Show clear local-only, syncing, synced, and recoverable sync states.
+- Show useful empty states and recoverable form errors.
 - Split fuel and electric charging into clear domain concepts while preserving a
   unified energy-cost dashboard.
 - Add ownership expenses: insurance, tax, inspections, tyres, and depreciation.

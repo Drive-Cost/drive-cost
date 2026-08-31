@@ -1,6 +1,6 @@
-import { FuelEntry } from "../models/FuelEntry";
-import { MaintenanceEntry } from "../models/MaintenanceEntry";
-import { Vehicle } from "../models/Vehicle";
+import { FuelEntry } from "../../models/FuelEntry";
+import { MaintenanceEntry } from "../../models/MaintenanceEntry";
+import { Vehicle } from "../../models/Vehicle";
 import {
   getEnergyCostLabel,
   getEnergyUnitLabel,
@@ -75,4 +75,3 @@ export function buildVehicleInsights(
 
   return insights.slice(0, 3);
 }
-

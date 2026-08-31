@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { createApp } from "../../app";
+import { createApp } from "../../../src/app";
 
 const testSecret = "test-secret-that-is-at-least-thirty-two-characters";
 

@@ -3,7 +3,7 @@ import {
   calculateCostPerKm,
   calculateTotalFuelCost,
   calculateTotalMaintenanceCost,
-} from "./costCalculator";
+} from "../../../src/services/vehicle/costCalculator";
 
 describe("ownership cost calculations", () => {
   it("sums fuel and maintenance independently", () => {

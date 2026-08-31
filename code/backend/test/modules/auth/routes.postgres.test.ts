@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { createApp } from "../../app";
-import { PostgresRepository } from "../../platform/persistence/postgresRepository";
+import { createApp } from "../../../src/app";
+import { PostgresRepository } from "../../../src/platform/persistence/postgresRepository";
 
 const databaseUrl = process.env.DATABASE_URL;
 const testSecret = "test-secret-that-is-at-least-thirty-two-characters";

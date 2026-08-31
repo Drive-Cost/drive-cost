@@ -1,6 +1,6 @@
-import { FuelEntry } from "../models/FuelEntry";
-import { MaintenanceEntry } from "../models/MaintenanceEntry";
-import { Vehicle } from "../models/Vehicle";
+import { FuelEntry } from "../../models/FuelEntry";
+import { MaintenanceEntry } from "../../models/MaintenanceEntry";
+import { Vehicle } from "../../models/Vehicle";
 
 export interface MileageSnapshot {
   ownershipStartMileage: number;

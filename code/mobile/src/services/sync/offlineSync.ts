@@ -1,8 +1,9 @@
-import { enqueueSyncJob } from "../database/syncRepository";
+import { enqueueSyncJob } from "../../database/syncRepository";
+import { SyncEntityType } from "../../domain/sync";
 import { processSyncQueue } from "./syncService";
 
 export async function queueSyncJob(
-  entityType: string,
+  entityType: SyncEntityType,
   operation: string,
   payload: unknown,
 ) {
