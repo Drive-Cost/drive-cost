@@ -1,70 +1,68 @@
-import { db } from "./db";
-import { SyncEntityType } from "../domain/sync";
+import { db } from './db';
+import { SyncEntityType, SyncOperation } from '../domain/sync';
+import { nextRetryAt } from '../services/sync/retryPolicy';
+
+const OUTBOX_OPERATION = SyncOperation.Upsert;
 
 export interface SyncJob {
-  id?: number;
-  entityType: SyncEntityType;
-  operation: string;
-  payload: string;
-  createdAt: string;
-  lastError?: string | null;
-  retryCount?: number;
-  nextAttemptAt?: string | null;
+    id?: number;
+    entityType: SyncEntityType;
+    payload: string;
+    createdAt: string;
+    lastError?: string | null;
+    retryCount?: number;
+    nextAttemptAt?: string | null;
 }
 
-export const enqueueSyncJob = async (job: SyncJob): Promise<void> => {
-  await db.runAsync(
-    `
+export const enqueueSyncJob = async (job: Omit<SyncJob, 'id'>): Promise<void> => {
+    await db.runAsync(
+        `
       INSERT INTO sync_queue (
         entityType, operation, payload, createdAt, lastError, retryCount, nextAttemptAt
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-    job.entityType,
-    job.operation,
-    job.payload,
-    job.createdAt,
-    job.lastError ?? null,
-    job.retryCount ?? 0,
-    job.nextAttemptAt ?? null,
-  );
+        job.entityType,
+        OUTBOX_OPERATION,
+        job.payload,
+        job.createdAt,
+        job.lastError ?? null,
+        job.retryCount ?? 0,
+        job.nextAttemptAt ?? null,
+    );
 };
 
 export const getSyncJobs = async (): Promise<SyncJob[]> => {
-  return db.getAllAsync<SyncJob>(
-    `
+    return db.getAllAsync<SyncJob>(
+        `
       SELECT * FROM sync_queue
       WHERE nextAttemptAt IS NULL OR nextAttemptAt <= ?
       ORDER BY createdAt ASC, id ASC
     `,
-    new Date().toISOString(),
-  );
+        new Date().toISOString(),
+    );
 };
 
 export const deleteSyncJob = async (jobId: number): Promise<void> => {
-  await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, jobId);
+    await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, jobId);
 };
 
 export const markSyncJobError = async (
-  jobId: number,
-  message: string,
+    job: Required<Pick<SyncJob, 'id'>> & Pick<SyncJob, 'retryCount'>,
+    message: string,
 ): Promise<void> => {
-  await db.runAsync(
-    `
+    const retryCount = (job.retryCount ?? 0) + 1;
+
+    await db.runAsync(
+        `
       UPDATE sync_queue
       SET lastError = ?,
-          retryCount = retryCount + 1,
+          retryCount = ?,
           nextAttemptAt = ?
       WHERE id = ?
-    `,
-    message,
-    getNextRetryAt(),
-    jobId,
-  );
+        `,
+        message,
+        retryCount,
+        nextRetryAt(retryCount),
+        job.id,
+    );
 };
-
-function getNextRetryAt(): string {
-  // The queue is retried on app launch and new writes. Backoff prevents an
-  // unreachable backend from consuming battery or blocking later local work.
-  const retryDelayMs = 30_000;
-  return new Date(Date.now() + retryDelayMs).toISOString();
-}

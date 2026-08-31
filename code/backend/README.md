@@ -73,7 +73,10 @@ migrated `DATABASE_URL` for the production storage path.
 Run it with:
 
 ```bash
-cd code/backend
+cd code/contracts
+npm install
+npm run build
+cd ../backend
 npm install
 cp .env.example .env
 # Set JWT_SECRET to a unique 32+ character value.

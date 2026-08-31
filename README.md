@@ -44,6 +44,10 @@ The mobile app already includes:
 From [`code/mobile`](/Users/goncalofrutuoso/Developer/drivecost/code/mobile):
 
 ```bash
+cd code/contracts
+npm install
+npm run build
+cd ../mobile
 npm install
 npm start
 ```
@@ -60,7 +64,8 @@ emulator. Without it, DriveCost remains fully local-first.
 Each module owns its own dependency lockfile and quality commands:
 
 ```bash
-cd code/mobile && npm run typecheck && npm test
+cd code/contracts && npm run typecheck
+cd ../mobile && npm run typecheck && npm test
 cd ../backend && npm run typecheck && npm test
 ```
 
@@ -71,6 +76,10 @@ GitHub Actions runs the same commands on pull requests and changes to `main`.
 From [`code/backend`](/Users/goncalofrutuoso/Developer/drivecost/code/backend):
 
 ```bash
+cd code/contracts
+npm install
+npm run build
+cd ../backend
 npm install
 cp .env.example .env
 # Set JWT_SECRET to a unique 32+ character value.

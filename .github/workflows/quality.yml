@@ -25,7 +25,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: code/${{ matrix.module }}/package-lock.json
+          cache-dependency-path: |
+            code/contracts/package-lock.json
+            code/${{ matrix.module }}/package-lock.json
+      - run: npm ci
+        working-directory: code/contracts
+      - run: npm run build
+        working-directory: code/contracts
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -56,7 +62,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: code/backend/package-lock.json
+          cache-dependency-path: |
+            code/contracts/package-lock.json
+            code/backend/package-lock.json
+      - run: npm ci
+        working-directory: code/contracts
+      - run: npm run build
+        working-directory: code/contracts
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:postgres

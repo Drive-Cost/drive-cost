@@ -50,6 +50,7 @@ Charts (future)
 
 ```text
 code/
+  contracts/              Shared, versioned HTTP and sync protocol types
   mobile/                 Expo application
   backend/                Fastify API and sync service
   database/               Shared database notes and future production migrations
@@ -222,9 +223,9 @@ Backend API
 
 - Models and validation are shared within the mobile app only; do not import
   mobile persistence models into the backend.
-- API request and response contracts will live in a small versioned shared
-  package only once both sides need the same contract. Do not create a monorepo
-  package prematurely.
+- API request, response, cursor, and Problem Details contracts live in
+  `code/contracts`. The package owns protocol values and runtime decoding;
+  mobile and backend own their own persistence models.
 - Database migrations are forward-only and tested against a representative
   prior schema.
 - The backend treats all mobile payloads as untrusted, even if their TypeScript

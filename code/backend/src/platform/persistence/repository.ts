@@ -1,30 +1,20 @@
-import { SyncChange, SyncedRecord, UserRecord } from "../../types/domain";
+import { SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
+import { SyncEntityType } from '@drivecost/contracts';
 
-export type SyncEntityType =
-  | "vehicle"
-  | "fuel_entry"
-  | "maintenance_entry";
+export type { SyncEntityType } from '@drivecost/contracts';
 
 export interface DriveCostRepository {
-  initialize(): Promise<void>;
-  findUserByEmail(email: string): Promise<UserRecord | null>;
-  createUser(user: UserRecord): Promise<void>;
-  listEntities(userId: string, entityType: SyncEntityType): Promise<SyncedRecord[]>;
-  entityExists(
-    userId: string,
-    entityType: SyncEntityType,
-    clientId: string,
-  ): Promise<boolean>;
-  upsertEntity(
-    userId: string,
-    entityType: SyncEntityType,
-    payload: object,
-  ): Promise<SyncedRecord>;
-  listChanges(userId: string, after: number, limit: number): Promise<SyncChange[]>;
-  close(): Promise<void>;
+    initialize(): Promise<void>;
+    findUserByEmail(email: string): Promise<UserRecord | null>;
+    createUser(user: UserRecord): Promise<void>;
+    listEntities(userId: string, entityType: SyncEntityType): Promise<SyncedRecord[]>;
+    entityExists(userId: string, entityType: SyncEntityType, clientId: string): Promise<boolean>;
+    upsertEntity(userId: string, entityType: SyncEntityType, payload: object): Promise<SyncedRecord>;
+    listChanges(userId: string, after: number, limit: number): Promise<SyncChange[]>;
+    close(): Promise<void>;
 }
 
 export function toPublicRecord(record: SyncedRecord) {
-  const { userId: _userId, ...publicRecord } = record;
-  return publicRecord;
+    const { userId: _userId, ...publicRecord } = record;
+    return publicRecord;
 }
