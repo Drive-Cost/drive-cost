@@ -20,6 +20,7 @@ The mobile app already includes:
   `ownershipStartMileage`, `trackingStartMileage`, and `currentOdometer`
 - local fuel or charging entry tracking
 - local maintenance tracking
+- edit fuel and maintenance entries while preserving their sync identity
 - delete fuel and maintenance entries, including while offline
 - a dashboard with summary cards and recent events
 - an offline-first sync queue that can replay changes to a backend later

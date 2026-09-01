@@ -27,7 +27,7 @@ Status: in progress.
 ## Phase 2: Honest Local Product
 
 - [x] Add delete flows for fuel and maintenance entries.
-- [ ] Add edit flows for fuel and maintenance entries.
+- [x] Add edit flows for fuel and maintenance entries.
 - [x] Show clear local-only, syncing, synced, and recoverable sync states.
 - Show useful empty states and recoverable form errors.
 - Split fuel and electric charging into clear domain concepts while preserving a

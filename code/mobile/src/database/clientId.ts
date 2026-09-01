@@ -4,3 +4,10 @@ export function requirePersistedClientId(clientId: string | undefined, entityNam
     }
     return clientId;
 }
+
+export function requirePersistedLocalId(id: number | undefined, entityName: string): number {
+    if (id === undefined) {
+        throw new Error(`${entityName} is missing its local ID.`);
+    }
+    return id;
+}

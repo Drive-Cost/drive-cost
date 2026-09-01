@@ -1,8 +1,8 @@
 import { Alert, Pressable, StyleSheet, Text } from 'react-native';
+import { entryErrorMessage, ENTRY_DELETE_FAILURE_MESSAGE } from './entryError';
 
 const DELETE_TITLE = 'Delete entry?';
 const DELETE_MESSAGE = 'This removes the entry from this vehicle and syncs the deletion to your devices.';
-const DELETE_FAILURE_MESSAGE = 'Unable to delete this entry.';
 const CANCEL_BUTTON_LABEL = 'Cancel';
 const DELETE_BUTTON_LABEL = 'Delete';
 
@@ -24,7 +24,7 @@ export function DeleteEntryButton({ entryId, vehicleId, onDelete, onError }: Del
                 style: 'destructive',
                 onPress: () => {
                     void onDelete(entryId, vehicleId).catch((error: unknown) => {
-                        onError(error instanceof Error ? error.message : DELETE_FAILURE_MESSAGE);
+                        onError(entryErrorMessage(error, ENTRY_DELETE_FAILURE_MESSAGE));
                     });
                 },
             },

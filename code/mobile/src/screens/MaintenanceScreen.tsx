@@ -6,20 +6,44 @@ import { formatCurrency } from '../services/vehicle/costCalculator';
 import { createMileageSnapshot } from '../services/vehicle/vehicleUsage';
 import { validateMaintenanceEntryForm } from '../domain/formValidation';
 import { DeleteEntryButton } from '../components/entry/DeleteEntryButton';
+import { EditEntryButton } from '../components/entry/EditEntryButton';
+import { MaintenanceEntry } from '../models/MaintenanceEntry';
+import { useEntryEditor } from '../components/entry/useEntryEditor';
+import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../components/entry/entryError';
+
+interface MaintenanceFormInput {
+    type: string;
+    description: string;
+    cost: string;
+    odometer: string;
+}
+
+const EMPTY_MAINTENANCE_FORM: MaintenanceFormInput = { type: '', description: '', cost: '', odometer: '' };
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function MaintenanceScreen() {
-    const { maintenanceEntries, createMaintenanceEntry, deleteMaintenanceEntry, loadMaintenanceEntries } = useMaintenanceStore();
+    const {
+        maintenanceEntries,
+        createMaintenanceEntry,
+        updateMaintenanceEntry,
+        deleteMaintenanceEntry,
+        loadMaintenanceEntries,
+    } = useMaintenanceStore();
     const { vehicles, activeVehicleId, syncVehicleOdometer } = useVehicleStore();
 
-    const [type, setType] = useState('');
-    const [description, setDescription] = useState('');
-    const [cost, setCost] = useState('');
-    const [odometer, setOdometer] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const {
+        formInput,
+        editingEntry,
+        updateFormInput,
+        clearEditor,
+        startEditing,
+        cancelIfVehicleChanged,
+        clearIfEditing,
+    } = useEntryEditor(EMPTY_MAINTENANCE_FORM, toMaintenanceFormInput);
 
     const vehicle = vehicles.find((item) => item.id === activeVehicleId);
     const mileageSnapshot = useMemo(() => {
@@ -32,28 +56,53 @@ export default function MaintenanceScreen() {
         loadMaintenanceEntries(activeVehicleId);
     }, [activeVehicleId, loadMaintenanceEntries]);
 
-    const handleSubmit = async () => {
+    useEffect(() => {
+        cancelIfVehicleChanged(activeVehicleId);
+    }, [activeVehicleId, cancelIfVehicleChanged]);
+
+    const handleDelete = async (entryId: number, vehicleId: number) => {
+        await deleteMaintenanceEntry(entryId, vehicleId);
+        clearIfEditing(entryId);
+    };
+
+    const handleSave = async () => {
         if (!activeVehicleId) return;
-        const result = validateMaintenanceEntryForm({ type, cost, odometer });
+        const result = validateMaintenanceEntryForm({
+            type: formInput.type,
+            cost: formInput.cost,
+            odometer: formInput.odometer,
+        });
         if (!result.ok) {
             setError(result.error);
             return;
         }
 
-        await createMaintenanceEntry({
-            vehicleId: activeVehicleId,
-            type: result.value.type,
-            description,
-            cost: result.value.cost,
-            date: new Date().toISOString(),
-            odometer: result.value.odometer,
-        });
-        await syncVehicleOdometer(activeVehicleId, result.value.odometer);
+        try {
+            if (editingEntry) {
+                await updateMaintenanceEntry({
+                    ...editingEntry,
+                    type: result.value.type,
+                    description: formInput.description,
+                    cost: result.value.cost,
+                    odometer: result.value.odometer,
+                });
+            } else {
+                await createMaintenanceEntry({
+                    vehicleId: activeVehicleId,
+                    type: result.value.type,
+                    description: formInput.description,
+                    cost: result.value.cost,
+                    date: new Date().toISOString(),
+                    odometer: result.value.odometer,
+                });
+            }
+            await syncVehicleOdometer(activeVehicleId, result.value.odometer);
 
-        setType('');
-        setDescription('');
-        setCost('');
-        setOdometer('');
+            clearEditor();
+            setError(null);
+        } catch (error) {
+            setError(entryErrorMessage(error, ENTRY_SAVE_FAILURE_MESSAGE));
+        }
     };
 
     const recentMaintenanceEntries = [...maintenanceEntries]
@@ -89,43 +138,49 @@ export default function MaintenanceScreen() {
                 placeholder="Type"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={type}
-                onChangeText={setType}
+                value={formInput.type}
+                onChangeText={(value) => updateFormInput('type', value)}
             />
 
             <TextInput
                 placeholder="Description"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={description}
-                onChangeText={setDescription}
+                value={formInput.description}
+                onChangeText={(value) => updateFormInput('description', value)}
             />
 
             <TextInput
                 placeholder="Cost"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={cost}
+                value={formInput.cost}
                 keyboardType="decimal-pad"
-                onChangeText={setCost}
+                onChangeText={(value) => updateFormInput('cost', value)}
             />
 
             <TextInput
                 placeholder="Odometer"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={odometer}
+                value={formInput.odometer}
                 keyboardType="number-pad"
-                onChangeText={setOdometer}
+                onChangeText={(value) => updateFormInput('odometer', value)}
             />
 
             <Pressable
                 style={[styles.button, !activeVehicleId && styles.buttonDisabled]}
                 disabled={!activeVehicleId}
-                onPress={handleSubmit}
+                onPress={handleSave}
             >
-                <Text style={styles.buttonText}>Save maintenance entry</Text>
+                <Text style={styles.buttonText}>{editingEntry ? 'Update maintenance entry' : 'Save maintenance entry'}</Text>
             </Pressable>
+
+            {editingEntry ? (
+                <Pressable style={styles.secondaryButton} onPress={clearEditor}>
+                    <Text style={styles.secondaryButtonText}>Cancel edit</Text>
+                </Pressable>
+            ) : null}
 
             {!activeVehicleId ? (
                 <Text style={styles.helperText}>Select a vehicle in Garage before logging maintenance.</Text>
@@ -145,22 +200,28 @@ export default function MaintenanceScreen() {
                     recentMaintenanceEntries.map((entry) => {
                         return (
                             <View key={entry.id ?? `${entry.date}-${entry.odometer}`} style={styles.historyItem}>
-                            <View style={styles.historyCopy}>
-                                <Text style={styles.historyPrimary}>{entry.type || 'Maintenance'}</Text>
-                                <Text style={styles.historyMeta}>{entry.description || 'Service entry'}</Text>
-                                <Text style={styles.historyMeta}>
-                                    {entry.odometer.toLocaleString()} km • {formatDate(entry.date)}
-                                </Text>
-                            </View>
-                            <View style={styles.historyActions}>
-                                <Text style={styles.historyAmount}>{formatCurrency(entry.cost)}</Text>
-                                <DeleteEntryButton
-                                    entryId={entry.id}
-                                    vehicleId={activeVehicleId}
-                                    onDelete={deleteMaintenanceEntry}
-                                    onError={setError}
-                                />
-                            </View>
+                                <View style={styles.historyCopy}>
+                                    <Text style={styles.historyPrimary}>{entry.type || 'Maintenance'}</Text>
+                                    <Text style={styles.historyMeta}>{entry.description || 'Service entry'}</Text>
+                                    <Text style={styles.historyMeta}>
+                                        {entry.odometer.toLocaleString()} km • {formatDate(entry.date)}
+                                    </Text>
+                                </View>
+                                <View style={styles.historyActions}>
+                                    <Text style={styles.historyAmount}>{formatCurrency(entry.cost)}</Text>
+                                    <EditEntryButton
+                                        onPress={() => {
+                                            startEditing(entry);
+                                            setError(null);
+                                        }}
+                                    />
+                                    <DeleteEntryButton
+                                        entryId={entry.id}
+                                        vehicleId={activeVehicleId}
+                                        onDelete={handleDelete}
+                                        onError={setError}
+                                    />
+                                </View>
                             </View>
                         );
                     })
@@ -168,6 +229,15 @@ export default function MaintenanceScreen() {
             </View>
         </ScrollView>
     );
+}
+
+function toMaintenanceFormInput(entry: MaintenanceEntry): MaintenanceFormInput {
+    return {
+        type: entry.type,
+        description: entry.description,
+        cost: String(entry.cost),
+        odometer: String(entry.odometer),
+    };
 }
 
 const styles = StyleSheet.create({
@@ -194,6 +264,8 @@ const styles = StyleSheet.create({
     button: { marginTop: 8, backgroundColor: '#0f172a', borderRadius: 16, alignItems: 'center', paddingVertical: 15 },
     buttonDisabled: { backgroundColor: '#94a3b8' },
     buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+    secondaryButton: { marginTop: 10, alignItems: 'center', paddingVertical: 12 },
+    secondaryButtonText: { color: '#2563eb', fontWeight: '600' },
     helperText: { marginTop: 12, color: '#475569' },
     historyCard: {
         marginTop: 20,

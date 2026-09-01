@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { addMaintenanceEntry, deleteMaintenanceEntryById, getMaintenanceEntries } from '../database/maintenanceRepository';
+import {
+    addMaintenanceEntry,
+    deleteMaintenanceEntryById,
+    getMaintenanceEntries,
+    updateMaintenanceEntry,
+} from '../database/maintenanceRepository';
 import { MaintenanceEntry } from '../models/MaintenanceEntry';
 import { persistAndQueueSync } from '../services/sync/offlineSync';
 import { toMaintenanceEntrySyncPayload } from '../services/sync/syncPayload';
@@ -11,6 +16,7 @@ interface MaintenanceState {
     maintenanceEntries: MaintenanceEntry[];
     loadMaintenanceEntries: (vehicleId: number) => Promise<void>;
     createMaintenanceEntry: (entry: MaintenanceEntry) => Promise<void>;
+    updateMaintenanceEntry: (entry: MaintenanceEntry) => Promise<void>;
     deleteMaintenanceEntry: (entryId: number, vehicleId: number) => Promise<void>;
 }
 
@@ -31,6 +37,15 @@ export const useMaintenanceStore = create<MaintenanceState>((set) => ({
         });
         const entries = await getMaintenanceEntries(entry.vehicleId);
         set({ maintenanceEntries: entries });
+    },
+
+    updateMaintenanceEntry: async (entry) => {
+        await persistAndQueueSync(SyncEntity.MaintenanceEntry, SyncOperation.Upsert, async (transaction) => {
+            const entryToUpdate = await updateMaintenanceEntry(entry, transaction);
+            const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
+            return toMaintenanceEntrySyncPayload(entryToUpdate, vehicleClientId);
+        });
+        set({ maintenanceEntries: await getMaintenanceEntries(entry.vehicleId) });
     },
 
     deleteMaintenanceEntry: async (entryId, vehicleId) => {

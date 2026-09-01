@@ -14,19 +14,37 @@ import {
 import { createMileageSnapshot } from '../services/vehicle/vehicleUsage';
 import { validateEnergyEntryForm } from '../domain/formValidation';
 import { DeleteEntryButton } from '../components/entry/DeleteEntryButton';
+import { EditEntryButton } from '../components/entry/EditEntryButton';
+import { FuelEntry } from '../models/FuelEntry';
+import { useEntryEditor } from '../components/entry/useEntryEditor';
+import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../components/entry/entryError';
+
+interface FuelFormInput {
+    liters: string;
+    price: string;
+    odometer: string;
+}
+
+const EMPTY_FUEL_FORM: FuelFormInput = { liters: '', price: '', odometer: '' };
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function FuelScreen() {
-    const { fuelEntries, createFuelEntry, deleteFuelEntry, loadFuelEntries } = useFuelStore();
+    const { fuelEntries, createFuelEntry, updateFuelEntry, deleteFuelEntry, loadFuelEntries } = useFuelStore();
     const { vehicles, activeVehicleId, syncVehicleOdometer } = useVehicleStore();
 
-    const [liters, setLiters] = useState('');
-    const [price, setPrice] = useState('');
-    const [odometer, setOdometer] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const {
+        formInput,
+        editingEntry,
+        updateFormInput,
+        clearEditor,
+        startEditing,
+        cancelIfVehicleChanged,
+        clearIfEditing,
+    } = useEntryEditor(EMPTY_FUEL_FORM, toFuelFormInput);
 
     const vehicle = vehicles.find((item) => item.id === activeVehicleId);
     const entryLabel = getEnergyEntryLabel(vehicle);
@@ -41,26 +59,51 @@ export default function FuelScreen() {
         loadFuelEntries(activeVehicleId);
     }, [activeVehicleId, loadFuelEntries]);
 
-    const handleAddFuel = async () => {
+    useEffect(() => {
+        cancelIfVehicleChanged(activeVehicleId);
+    }, [activeVehicleId, cancelIfVehicleChanged]);
+
+    const handleDelete = async (entryId: number, vehicleId: number) => {
+        await deleteFuelEntry(entryId, vehicleId);
+        clearIfEditing(entryId);
+    };
+
+    const handleSaveFuel = async () => {
         if (!activeVehicleId) return;
-        const result = validateEnergyEntryForm({ quantity: liters, price, odometer });
+        const result = validateEnergyEntryForm({
+            quantity: formInput.liters,
+            price: formInput.price,
+            odometer: formInput.odometer,
+        });
         if (!result.ok) {
             setError(result.error);
             return;
         }
 
-        await createFuelEntry({
-            vehicleId: activeVehicleId,
-            date: new Date().toISOString(),
-            liters: result.value.quantity,
-            price: result.value.price,
-            odometer: result.value.odometer,
-        });
-        await syncVehicleOdometer(activeVehicleId, result.value.odometer);
+        try {
+            if (editingEntry) {
+                await updateFuelEntry({
+                    ...editingEntry,
+                    liters: result.value.quantity,
+                    price: result.value.price,
+                    odometer: result.value.odometer,
+                });
+            } else {
+                await createFuelEntry({
+                    vehicleId: activeVehicleId,
+                    date: new Date().toISOString(),
+                    liters: result.value.quantity,
+                    price: result.value.price,
+                    odometer: result.value.odometer,
+                });
+            }
+            await syncVehicleOdometer(activeVehicleId, result.value.odometer);
 
-        setLiters('');
-        setPrice('');
-        setOdometer('');
+            clearEditor();
+            setError(null);
+        } catch (error) {
+            setError(entryErrorMessage(error, ENTRY_SAVE_FAILURE_MESSAGE));
+        }
     };
 
     const recentFuelEntries = [...fuelEntries].sort((left, right) => right.date.localeCompare(left.date)).slice(0, 6);
@@ -92,36 +135,44 @@ export default function FuelScreen() {
                 placeholder={isElectricVehicle(vehicle) ? 'kWh' : 'Liters'}
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={liters}
+                value={formInput.liters}
                 keyboardType="decimal-pad"
-                onChangeText={setLiters}
+                onChangeText={(value) => updateFormInput('liters', value)}
             />
 
             <TextInput
                 placeholder="Price"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={price}
+                value={formInput.price}
                 keyboardType="decimal-pad"
-                onChangeText={setPrice}
+                onChangeText={(value) => updateFormInput('price', value)}
             />
 
             <TextInput
                 placeholder="Odometer"
                 placeholderTextColor="#94a3b8"
                 style={styles.input}
-                value={odometer}
+                value={formInput.odometer}
                 keyboardType="number-pad"
-                onChangeText={setOdometer}
+                onChangeText={(value) => updateFormInput('odometer', value)}
             />
 
             <Pressable
                 style={[styles.button, !activeVehicleId && styles.buttonDisabled]}
                 disabled={!activeVehicleId}
-                onPress={handleAddFuel}
+                onPress={handleSaveFuel}
             >
-                <Text style={styles.buttonText}>Save {entryLabel.toLowerCase()} entry</Text>
+                <Text style={styles.buttonText}>
+                    {editingEntry ? `Update ${entryLabel.toLowerCase()} entry` : `Save ${entryLabel.toLowerCase()} entry`}
+                </Text>
             </Pressable>
+
+            {editingEntry ? (
+                <Pressable style={styles.secondaryButton} onPress={clearEditor}>
+                    <Text style={styles.secondaryButtonText}>Cancel edit</Text>
+                </Pressable>
+            ) : null}
 
             {!activeVehicleId ? (
                 <Text style={styles.helperText}>Select a vehicle in Garage before adding fuel costs.</Text>
@@ -139,23 +190,29 @@ export default function FuelScreen() {
                     recentFuelEntries.map((entry) => {
                         return (
                             <View key={entry.id ?? `${entry.date}-${entry.odometer}`} style={styles.historyItem}>
-                            <View style={styles.historyCopy}>
-                                <Text style={styles.historyPrimary}>
-                                    {entry.liters.toFixed(1)} {energyUnitLabel}
-                                </Text>
-                                <Text style={styles.historyMeta}>
-                                    {entry.odometer.toLocaleString()} km • {formatDate(entry.date)}
-                                </Text>
-                            </View>
-                            <View style={styles.historyActions}>
-                                <Text style={styles.historyAmount}>{formatCurrency(entry.price)}</Text>
-                                <DeleteEntryButton
-                                    entryId={entry.id}
-                                    vehicleId={activeVehicleId}
-                                    onDelete={deleteFuelEntry}
-                                    onError={setError}
-                                />
-                            </View>
+                                <View style={styles.historyCopy}>
+                                    <Text style={styles.historyPrimary}>
+                                        {entry.liters.toFixed(1)} {energyUnitLabel}
+                                    </Text>
+                                    <Text style={styles.historyMeta}>
+                                        {entry.odometer.toLocaleString()} km • {formatDate(entry.date)}
+                                    </Text>
+                                </View>
+                                <View style={styles.historyActions}>
+                                    <Text style={styles.historyAmount}>{formatCurrency(entry.price)}</Text>
+                                    <EditEntryButton
+                                        onPress={() => {
+                                            startEditing(entry);
+                                            setError(null);
+                                        }}
+                                    />
+                                    <DeleteEntryButton
+                                        entryId={entry.id}
+                                        vehicleId={activeVehicleId}
+                                        onDelete={handleDelete}
+                                        onError={setError}
+                                    />
+                                </View>
                             </View>
                         );
                     })
@@ -163,6 +220,14 @@ export default function FuelScreen() {
             </View>
         </ScrollView>
     );
+}
+
+function toFuelFormInput(entry: FuelEntry): FuelFormInput {
+    return {
+        liters: String(entry.liters),
+        price: String(entry.price),
+        odometer: String(entry.odometer),
+    };
 }
 
 const styles = StyleSheet.create({
@@ -189,6 +254,8 @@ const styles = StyleSheet.create({
     button: { marginTop: 8, backgroundColor: '#0f172a', borderRadius: 16, alignItems: 'center', paddingVertical: 15 },
     buttonDisabled: { backgroundColor: '#94a3b8' },
     buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+    secondaryButton: { marginTop: 10, alignItems: 'center', paddingVertical: 12 },
+    secondaryButtonText: { color: '#2563eb', fontWeight: '600' },
     helperText: { marginTop: 12, color: '#475569' },
     historyCard: {
         marginTop: 20,

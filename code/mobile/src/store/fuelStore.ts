@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { addFuelEntry, deleteFuelEntryById, getFuelEntries } from '../database/fuelRepository';
+import { addFuelEntry, deleteFuelEntryById, getFuelEntries, updateFuelEntry } from '../database/fuelRepository';
 import { FuelEntry } from '../models/FuelEntry';
 import { persistAndQueueSync } from '../services/sync/offlineSync';
 import { toFuelEntrySyncPayload } from '../services/sync/syncPayload';
@@ -11,6 +11,7 @@ interface FuelState {
     fuelEntries: FuelEntry[];
     loadFuelEntries: (vehicleId: number) => Promise<void>;
     createFuelEntry: (entry: FuelEntry) => Promise<void>;
+    updateFuelEntry: (entry: FuelEntry) => Promise<void>;
     deleteFuelEntry: (entryId: number, vehicleId: number) => Promise<void>;
 }
 
@@ -31,6 +32,15 @@ export const useFuelStore = create<FuelState>((set) => ({
         });
         const entries = await getFuelEntries(entry.vehicleId);
         set({ fuelEntries: entries });
+    },
+
+    updateFuelEntry: async (entry) => {
+        await persistAndQueueSync(SyncEntity.FuelEntry, SyncOperation.Upsert, async (transaction) => {
+            const entryToUpdate = await updateFuelEntry(entry, transaction);
+            const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
+            return toFuelEntrySyncPayload(entryToUpdate, vehicleClientId);
+        });
+        set({ fuelEntries: await getFuelEntries(entry.vehicleId) });
     },
 
     deleteFuelEntry: async (entryId, vehicleId) => {
