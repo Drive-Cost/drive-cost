@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RemoteChange, SyncEntity } from '../../../../src/domain/sync';
+import { RemoteChange, SyncEntity, SyncOperation } from '../../../../src/domain/sync';
 import { PullSyncDependencies, reconcilePulledChanges } from '../../../../src/services/sync/pullSync/pullSyncEngine';
 
 interface MemoryTransaction {
@@ -64,6 +64,21 @@ describe('reconcilePulledChanges', () => {
         expect(replica.cursor).toBe(0);
         expect(replica.pendingOutbox).toEqual([{ clientId: 'local-pending' }]);
     });
+
+    it('Given an entry tombstone, when reconciling it, then removes the local entry without touching pending outbox jobs', async () => {
+        const replica = createReplica();
+        const changes: RemoteChange[] = [
+            vehicleChange(1, 'vehicle-a', 10_000),
+            fuelChange(2, 'fuel-a', 'vehicle-a', 31),
+            fuelDeleteChange(3, 'fuel-a'),
+        ];
+
+        await reconcilePulledChanges(createDependencies(replica, changes));
+
+        expect(replica.fuelEntries).toEqual(new Map());
+        expect(replica.cursor).toBe(3);
+        expect(replica.pendingOutbox).toEqual([{ clientId: 'local-pending' }]);
+    });
 });
 
 function createReplica(): MemoryReplica {
@@ -104,6 +119,15 @@ function createDependencies(
             }
         },
         applyChange: async (change) => {
+            if (change.operation === SyncOperation.Delete) {
+                if (change.entityType === SyncEntity.FuelEntry) {
+                    replica.fuelEntries.delete(change.payload.clientId);
+                } else {
+                    replica.maintenanceEntries.delete(change.payload.clientId);
+                }
+                return;
+            }
+
             if (change.entityType === SyncEntity.Vehicle) {
                 const existing = replica.vehicles.get(change.payload.clientId);
                 replica.vehicles.set(change.payload.clientId, {
@@ -146,6 +170,7 @@ function vehicleChange(sequence: number, clientId: string, currentOdometer: numb
     return {
         sequence,
         entityType: SyncEntity.Vehicle,
+        operation: SyncOperation.Upsert,
         payload: {
             clientId,
             brand: 'Toyota',
@@ -162,6 +187,7 @@ function fuelChange(sequence: number, clientId: string, vehicleClientId: string,
     return {
         sequence,
         entityType: SyncEntity.FuelEntry,
+        operation: SyncOperation.Upsert,
         payload: { clientId, vehicleClientId, date: '2026-07-26T12:00:00.000Z', odometer: 10_000, liters, price: 72.5 },
     };
 }
@@ -170,6 +196,7 @@ function maintenanceChange(sequence: number, clientId: string, vehicleClientId: 
     return {
         sequence,
         entityType: SyncEntity.MaintenanceEntry,
+        operation: SyncOperation.Upsert,
         payload: {
             clientId,
             vehicleClientId,
@@ -179,5 +206,14 @@ function maintenanceChange(sequence: number, clientId: string, vehicleClientId: 
             description: 'Oil and filter replacement',
             cost,
         },
+    };
+}
+
+function fuelDeleteChange(sequence: number, clientId: string): RemoteChange {
+    return {
+        sequence,
+        entityType: SyncEntity.FuelEntry,
+        operation: SyncOperation.Delete,
+        payload: { clientId },
     };
 }

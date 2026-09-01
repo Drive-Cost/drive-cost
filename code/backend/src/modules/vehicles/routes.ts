@@ -21,6 +21,9 @@ export async function registerVehicleRoutes(app: FastifyInstance, repository: Dr
             }
 
             const record = await repository.upsertEntity(request.user.sub, SyncEntity.Vehicle, request.body);
+            if (!record) {
+                return reply.code(204).send();
+            }
 
             reply.code(201);
             return { data: toPublicRecord(record) };

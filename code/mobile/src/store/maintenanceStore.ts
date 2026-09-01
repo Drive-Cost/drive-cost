@@ -1,16 +1,17 @@
 import { create } from 'zustand';
-import { addMaintenanceEntry, getMaintenanceEntries } from '../database/maintenanceRepository';
+import { addMaintenanceEntry, deleteMaintenanceEntryById, getMaintenanceEntries } from '../database/maintenanceRepository';
 import { MaintenanceEntry } from '../models/MaintenanceEntry';
 import { persistAndQueueSync } from '../services/sync/offlineSync';
 import { toMaintenanceEntrySyncPayload } from '../services/sync/syncPayload';
 import { createClientId } from '../domain/identity';
-import { SyncEntity } from '../domain/sync';
+import { SyncEntity, SyncOperation } from '../domain/sync';
 import { requireVehicleClientId } from '../services/sync/vehicleClientId';
 
 interface MaintenanceState {
     maintenanceEntries: MaintenanceEntry[];
     loadMaintenanceEntries: (vehicleId: number) => Promise<void>;
     createMaintenanceEntry: (entry: MaintenanceEntry) => Promise<void>;
+    deleteMaintenanceEntry: (entryId: number, vehicleId: number) => Promise<void>;
 }
 
 export const useMaintenanceStore = create<MaintenanceState>((set) => ({
@@ -23,12 +24,20 @@ export const useMaintenanceStore = create<MaintenanceState>((set) => ({
 
     createMaintenanceEntry: async (entry) => {
         const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.MaintenanceEntry) };
-        await persistAndQueueSync(SyncEntity.MaintenanceEntry, async (transaction) => {
+        await persistAndQueueSync(SyncEntity.MaintenanceEntry, SyncOperation.Upsert, async (transaction) => {
             const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
             await addMaintenanceEntry(entryToCreate, transaction);
             return toMaintenanceEntrySyncPayload(entryToCreate, vehicleClientId);
         });
         const entries = await getMaintenanceEntries(entry.vehicleId);
         set({ maintenanceEntries: entries });
+    },
+
+    deleteMaintenanceEntry: async (entryId, vehicleId) => {
+        await persistAndQueueSync(SyncEntity.MaintenanceEntry, SyncOperation.Delete, async (transaction) => {
+            const clientId = await deleteMaintenanceEntryById(entryId, transaction);
+            return { clientId };
+        });
+        set({ maintenanceEntries: await getMaintenanceEntries(vehicleId) });
     },
 }));

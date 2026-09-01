@@ -1,10 +1,11 @@
-import type { SyncEntityType, SyncPayloadByEntity } from '../../domain/sync';
+import type { SyncEntityType, SyncOperationByEntity, SyncPayloadByOperation } from '../../domain/sync';
 
 export interface LocalSyncMutationDependencies<Transaction> {
     withTransaction: (operation: (transaction: Transaction) => Promise<void>) => Promise<void>;
-    enqueue: <EntityType extends SyncEntityType>(
+    enqueue: <EntityType extends SyncEntityType, Operation extends SyncOperationByEntity[EntityType]>(
         entityType: EntityType,
-        payload: SyncPayloadByEntity[EntityType],
+        operation: Operation,
+        payload: SyncPayloadByOperation<EntityType, Operation>,
         createdAt: string,
         transaction: Transaction,
     ) => Promise<void>;
@@ -14,13 +15,16 @@ export interface LocalSyncMutationDependencies<Transaction> {
 
 export function createLocalSyncMutation<Transaction>(dependencies: LocalSyncMutationDependencies<Transaction>) {
     return {
-        persistAndQueue: async <EntityType extends SyncEntityType>(
+        persistAndQueue: async <EntityType extends SyncEntityType, Operation extends SyncOperationByEntity[EntityType]>(
             entityType: EntityType,
-            persist: (transaction: Transaction) => Promise<SyncPayloadByEntity[EntityType]>,
+            operation: Operation,
+            persist: (
+                transaction: Transaction,
+            ) => Promise<SyncPayloadByOperation<EntityType, Operation>>,
         ): Promise<void> => {
             await dependencies.withTransaction(async (transaction) => {
                 const payload = await persist(transaction);
-                await dependencies.enqueue(entityType, payload, dependencies.now(), transaction);
+                await dependencies.enqueue(entityType, operation, payload, dependencies.now(), transaction);
             });
 
             await dependencies.triggerQueuedSync();

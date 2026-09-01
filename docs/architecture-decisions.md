@@ -73,8 +73,13 @@ and consistency complexity without solving a demonstrated DriveCost need.
 
 ## ADR-010: Pull Sync Uses An Append-Only Cursor Feed
 
-Each accepted Postgres upsert will emit a user-scoped change with a monotonic
+Each accepted Postgres mutation emits a user-scoped change with a monotonic
 cursor. Clients request changes after their last cursor and apply them in order.
 For the current single-owner vehicle model, the server uses last-write-wins for
-the same user, entity type, and client ID. Deletions and shared-vehicle editing
-are intentionally deferred until they have explicit tombstone and conflict UX.
+the same user, entity type, and client ID.
+
+Fuel and maintenance deletions are represented as tombstones in the shared
+change feed. A tombstone deletes the local row by client ID, is safe to replay,
+and rejects stale later upserts so an offline device cannot resurrect a deleted
+entry. Vehicle deletion remains intentionally unavailable until its cascade and
+conflict policy are explicit.

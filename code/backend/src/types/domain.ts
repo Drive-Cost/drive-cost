@@ -1,3 +1,5 @@
+import type { SyncEntityType, SyncOperationByEntity } from '@drivecost/contracts';
+
 export interface UserRecord {
     id: string;
     mode: 'guest' | 'registered';
@@ -18,6 +20,7 @@ export interface SyncedRecord {
     userId: string;
     createdAt: string;
     updatedAt: string;
+    deletedAt?: string;
     [key: string]: unknown;
 }
 
@@ -37,9 +40,9 @@ export interface SyncChange {
     sequence: number;
     userId: string;
     entityType: SyncEntityType;
+    operation: SyncOperationByEntity[SyncEntityType];
     entityId: string;
     clientId: string;
     payload: Record<string, unknown>;
     createdAt: string;
 }
-import { SyncEntityType } from '@drivecost/contracts';

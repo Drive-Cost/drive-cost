@@ -6,7 +6,7 @@ export const SyncEntity = {
 
 export type SyncEntityType = (typeof SyncEntity)[keyof typeof SyncEntity];
 
-export const SyncOperation = { Upsert: 'upsert' } as const;
+export const SyncOperation = { Upsert: 'upsert', Delete: 'delete' } as const;
 
 export type SyncOperation = (typeof SyncOperation)[keyof typeof SyncOperation];
 
@@ -65,12 +65,30 @@ export interface SyncPayloadByEntity {
 
 export type SyncPayload = SyncPayloadByEntity[SyncEntityType];
 
+export interface DeleteSyncPayload {
+    clientId: string;
+}
+
+export interface SyncOperationByEntity {
+    [SyncEntity.Vehicle]: typeof SyncOperation.Upsert;
+    [SyncEntity.FuelEntry]: SyncOperation;
+    [SyncEntity.MaintenanceEntry]: SyncOperation;
+}
+
+export type SyncPayloadByOperation<
+    EntityType extends SyncEntityType,
+    Operation extends SyncOperationByEntity[EntityType],
+> = Operation extends typeof SyncOperation.Upsert ? SyncPayloadByEntity[EntityType] : DeleteSyncPayload;
+
 export type RemoteChange = {
     [EntityType in SyncEntityType]: {
-        sequence: number;
-        entityType: EntityType;
-        payload: SyncPayloadByEntity[EntityType];
-    };
+        [Operation in SyncOperationByEntity[EntityType]]: {
+            sequence: number;
+            entityType: EntityType;
+            operation: Operation;
+            payload: SyncPayloadByOperation<EntityType, Operation>;
+        };
+    }[SyncOperationByEntity[EntityType]];
 }[SyncEntityType];
 
 export interface PullResponse {
@@ -95,11 +113,31 @@ export function decodeSyncEntity(value: unknown): SyncEntityType {
     return value as SyncEntityType;
 }
 
-export function decodeSyncPayload<EntityType extends SyncEntityType>(
+export function decodeSyncPayload<
+    EntityType extends SyncEntityType,
+    Operation extends SyncOperationByEntity[EntityType],
+>(
+    entityType: EntityType,
+    operation: Operation,
+    value: unknown,
+): SyncPayloadByOperation<EntityType, Operation> {
+    if (operation === SyncOperation.Delete) {
+        return decodeDeletePayload(value) as SyncPayloadByOperation<EntityType, Operation>;
+    }
+    return syncPayloadDecoderByEntity[entityType](value) as SyncPayloadByOperation<EntityType, Operation>;
+}
+
+export function decodeSyncOperation<EntityType extends SyncEntityType>(
     entityType: EntityType,
     value: unknown,
-): SyncPayloadByEntity[EntityType] {
-    return syncPayloadDecoderByEntity[entityType](value) as SyncPayloadByEntity[EntityType];
+): SyncOperationByEntity[EntityType] {
+    if (value === SyncOperation.Upsert) {
+        return value as SyncOperationByEntity[EntityType];
+    }
+    if (value === SyncOperation.Delete && entityType !== SyncEntity.Vehicle) {
+        return value as SyncOperationByEntity[EntityType];
+    }
+    throw new Error('Unsupported sync operation.');
 }
 
 export function decodePullResponse(value: unknown, after: number): PullResponse {
@@ -156,11 +194,18 @@ const syncPayloadDecoderByEntity: {
 function decodeRemoteChange(value: unknown): RemoteChange {
     if (!isRecord(value) || !isCursor(value.sequence)) throw new Error('Invalid sync change.');
     const entityType = decodeSyncEntity(value.entityType);
+    const operation = decodeSyncOperation(entityType, value.operation);
     return {
         sequence: value.sequence,
         entityType,
-        payload: decodeSyncPayload(entityType, value.payload),
+        operation,
+        payload: decodeSyncPayload(entityType, operation, value.payload),
     } as RemoteChange;
+}
+
+function decodeDeletePayload(value: unknown): DeleteSyncPayload {
+    const payload = requiredRecord(value);
+    return { clientId: requiredString(payload, 'clientId') };
 }
 
 function decodeVehicle(value: unknown): VehicleSyncPayload {

@@ -20,6 +20,7 @@ The mobile app already includes:
   `ownershipStartMileage`, `trackingStartMileage`, and `currentOdometer`
 - local fuel or charging entry tracking
 - local maintenance tracking
+- delete fuel and maintenance entries, including while offline
 - a dashboard with summary cards and recent events
 - an offline-first sync queue that can replay changes to a backend later
 
@@ -96,6 +97,9 @@ Current backend endpoints:
 - `POST /vehicles`
 - `POST /fuel-entries`
 - `POST /maintenance-entries`
+- `DELETE /fuel-entries/:clientId`
+- `DELETE /maintenance-entries/:clientId`
+- `GET /sync?after=:cursor`
 
 ## Product Direction
 

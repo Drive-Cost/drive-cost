@@ -5,13 +5,14 @@ import { useVehicleStore } from '../store/vehicleStore';
 import { formatCurrency } from '../services/vehicle/costCalculator';
 import { createMileageSnapshot } from '../services/vehicle/vehicleUsage';
 import { validateMaintenanceEntryForm } from '../domain/formValidation';
+import { DeleteEntryButton } from '../components/entry/DeleteEntryButton';
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function MaintenanceScreen() {
-    const { maintenanceEntries, createMaintenanceEntry, loadMaintenanceEntries } = useMaintenanceStore();
+    const { maintenanceEntries, createMaintenanceEntry, deleteMaintenanceEntry, loadMaintenanceEntries } = useMaintenanceStore();
     const { vehicles, activeVehicleId, syncVehicleOdometer } = useVehicleStore();
 
     const [type, setType] = useState('');
@@ -141,8 +142,9 @@ export default function MaintenanceScreen() {
                         No maintenance entries yet. Your saved services will show up here.
                     </Text>
                 ) : (
-                    recentMaintenanceEntries.map((entry) => (
-                        <View key={entry.id ?? `${entry.date}-${entry.odometer}`} style={styles.historyItem}>
+                    recentMaintenanceEntries.map((entry) => {
+                        return (
+                            <View key={entry.id ?? `${entry.date}-${entry.odometer}`} style={styles.historyItem}>
                             <View style={styles.historyCopy}>
                                 <Text style={styles.historyPrimary}>{entry.type || 'Maintenance'}</Text>
                                 <Text style={styles.historyMeta}>{entry.description || 'Service entry'}</Text>
@@ -150,9 +152,18 @@ export default function MaintenanceScreen() {
                                     {entry.odometer.toLocaleString()} km • {formatDate(entry.date)}
                                 </Text>
                             </View>
-                            <Text style={styles.historyAmount}>{formatCurrency(entry.cost)}</Text>
-                        </View>
-                    ))
+                            <View style={styles.historyActions}>
+                                <Text style={styles.historyAmount}>{formatCurrency(entry.cost)}</Text>
+                                <DeleteEntryButton
+                                    entryId={entry.id}
+                                    vehicleId={activeVehicleId}
+                                    onDelete={deleteMaintenanceEntry}
+                                    onError={setError}
+                                />
+                            </View>
+                            </View>
+                        );
+                    })
                 )}
             </View>
         </ScrollView>
@@ -207,4 +218,5 @@ const styles = StyleSheet.create({
     historyPrimary: { fontSize: 16, fontWeight: '600', color: '#0f172a' },
     historyMeta: { marginTop: 4, color: '#475569', lineHeight: 20 },
     historyAmount: { color: '#0f172a', fontWeight: '600' },
+    historyActions: { alignItems: 'flex-end', gap: 8 },
 });

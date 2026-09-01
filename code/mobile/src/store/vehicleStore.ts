@@ -10,7 +10,7 @@ import { persistAndQueueSync } from '../services/sync/offlineSync';
 import { toVehicleSyncPayload } from '../services/sync/syncPayload';
 import { requireVehicleForSync } from '../services/sync/vehicleClientId';
 import { createClientId } from '../domain/identity';
-import { SyncEntity } from '../domain/sync';
+import { SyncEntity, SyncOperation } from '../domain/sync';
 
 interface VehicleState {
     vehicles: Vehicle[];
@@ -41,7 +41,7 @@ export const useVehicleStore = create<VehicleState>((set) => ({
 
     createVehicle: async (vehicle) => {
         const vehicleToCreate = { ...vehicle, clientId: createClientId(SyncEntity.Vehicle) };
-        await persistAndQueueSync(SyncEntity.Vehicle, async (transaction) => {
+        await persistAndQueueSync(SyncEntity.Vehicle, SyncOperation.Upsert, async (transaction) => {
             await addVehicle(vehicleToCreate, transaction);
             return toVehicleSyncPayload(vehicleToCreate);
         });
@@ -52,7 +52,7 @@ export const useVehicleStore = create<VehicleState>((set) => ({
 
     saveVehicle: async (vehicle) => {
         const vehicleToSave = { ...vehicle, clientId: vehicle.clientId ?? createClientId(SyncEntity.Vehicle) };
-        await persistAndQueueSync(SyncEntity.Vehicle, async (transaction) => {
+        await persistAndQueueSync(SyncEntity.Vehicle, SyncOperation.Upsert, async (transaction) => {
             await updateVehicle(vehicleToSave, transaction);
             return toVehicleSyncPayload(vehicleToSave);
         });
@@ -64,7 +64,7 @@ export const useVehicleStore = create<VehicleState>((set) => ({
     setActiveVehicle: (id) => set({ activeVehicleId: id }),
 
     syncVehicleOdometer: async (vehicleId, odometer) => {
-        await persistAndQueueSync(SyncEntity.Vehicle, async (transaction) => {
+        await persistAndQueueSync(SyncEntity.Vehicle, SyncOperation.Upsert, async (transaction) => {
             await updateVehicleCurrentOdometer(vehicleId, odometer, transaction);
             const updatedVehicle = await requireVehicleForSync(vehicleId, transaction);
             return toVehicleSyncPayload(updatedVehicle);

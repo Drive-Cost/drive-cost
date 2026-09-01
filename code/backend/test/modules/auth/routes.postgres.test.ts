@@ -181,6 +181,52 @@ test('Postgres propagates vehicle and entry changes between two device cursors',
         assert.equal(deviceAIncrementalPull.json().data[0].payload.clientId, vehicle.clientId);
         assert.equal(deviceAIncrementalPull.json().data[0].payload.currentOdometer, 12_500);
 
+        const deleteFromDeviceB = await app.inject({
+            method: 'DELETE',
+            url: '/fuel-entries/fuel_two_device_1',
+            headers,
+        });
+        assert.equal(deleteFromDeviceB.statusCode, 204);
+
+        const deviceADeletionPull = await app.inject({
+            method: 'GET',
+            url: `/sync?after=${deviceAIncrementalPull.json().nextCursor}`,
+            headers,
+        });
+        assert.equal(deviceADeletionPull.statusCode, 200);
+        const [deletionChange] = deviceADeletionPull.json().data;
+        assert.equal(deletionChange.sequence, deviceADeletionPull.json().nextCursor);
+        assert.equal(deletionChange.entityType, 'fuel_entry');
+        assert.equal(deletionChange.operation, 'delete');
+        assert.equal(deletionChange.entityId, createdFuelEntry.json().data.id);
+        assert.equal(deletionChange.clientId, 'fuel_two_device_1');
+        assert.deepEqual(deletionChange.payload, { clientId: 'fuel_two_device_1' });
+
+        const staleFuelReplay = await app.inject({
+            method: 'POST',
+            url: '/fuel-entries',
+            headers,
+            payload: {
+                clientId: 'fuel_two_device_1',
+                vehicleClientId: vehicle.clientId,
+                date: '2026-07-26T08:00:00.000Z',
+                liters: 42.5,
+                price: 75.2,
+                odometer: 12_100,
+            },
+        });
+        assert.equal(staleFuelReplay.statusCode, 204);
+
+        const noResurrectionChange = await app.inject({
+            method: 'GET',
+            url: `/sync?after=${deviceADeletionPull.json().nextCursor}`,
+            headers,
+        });
+        assert.deepEqual(noResurrectionChange.json(), {
+            data: [],
+            nextCursor: deviceADeletionPull.json().nextCursor,
+        });
+
         const vehicles = await app.inject({ method: 'GET', url: '/vehicles', headers });
         assert.equal(vehicles.statusCode, 200);
         assert.equal(vehicles.json().data.length, 1);

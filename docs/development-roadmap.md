@@ -26,7 +26,8 @@ Status: in progress.
 
 ## Phase 2: Honest Local Product
 
-- Add edit and delete flows for fuel and maintenance entries.
+- [x] Add delete flows for fuel and maintenance entries.
+- [ ] Add edit flows for fuel and maintenance entries.
 - [x] Show clear local-only, syncing, synced, and recoverable sync states.
 - Show useful empty states and recoverable form errors.
 - Split fuel and electric charging into clear domain concepts while preserving a
@@ -47,6 +48,8 @@ Status: in progress.
 - [x] Add an idempotent changes API with cursor-based pull sync and a
   last-write-wins conflict policy.
 - [x] Reconcile cursor batches atomically into SQLite without touching the local outbox.
+- [x] Propagate idempotent fuel and maintenance deletions with tombstones that
+  prevent stale device writes from restoring deleted entries.
 - [x] Share typed sync and Problem Details contracts between mobile and backend.
 - [x] Write Postgres entity upserts and change-feed records in one transaction.
 - [x] Return RFC 9457 Problem Details for validation, authentication, conflict, and server failures.
@@ -61,5 +64,4 @@ vehicle and entries offline, reopen the app, sync them on two devices, and see
 the same result without duplicates or lost edits.
 
 It is not production-ready until account recovery, token rotation, rate
-limiting, remote deletion semantics, monitoring, and atomic local
-write-plus-outbox persistence are in place.
+limiting, monitoring, and a vehicle-deletion policy are in place.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SyncEntity, VehicleSyncPayload } from '../../../src/domain/sync';
+import { SyncEntity, SyncOperation, VehicleSyncPayload } from '../../../src/domain/sync';
 import { createLocalSyncMutation } from '../../../src/services/sync/localMutation';
 
 interface MemoryTransaction {
@@ -8,7 +8,7 @@ interface MemoryTransaction {
 
 interface MemoryReplica {
     writes: string[];
-    jobs: Array<{ entityType: string; clientId: string; createdAt: string }>;
+    jobs: Array<{ entityType: string; operation: string; clientId: string; createdAt: string }>;
     events: string[];
 }
 
@@ -19,14 +19,16 @@ describe('createLocalSyncMutation', () => {
         const replica = createReplica();
         const mutation = createMutation(replica);
 
-        await mutation.persistAndQueue(SyncEntity.Vehicle, async (transaction) => {
+        await mutation.persistAndQueue(SyncEntity.Vehicle, SyncOperation.Upsert, async (transaction) => {
             transaction.replica.events.push('persist');
             transaction.replica.writes.push('vehicle-1');
             return vehiclePayload('vehicle-1');
         });
 
         expect(replica.writes).toEqual(['vehicle-1']);
-        expect(replica.jobs).toEqual([{ entityType: SyncEntity.Vehicle, clientId: 'vehicle-1', createdAt: CREATED_AT }]);
+        expect(replica.jobs).toEqual([
+            { entityType: SyncEntity.Vehicle, operation: SyncOperation.Upsert, clientId: 'vehicle-1', createdAt: CREATED_AT },
+        ]);
         expect(replica.events).toEqual(['begin', 'persist', 'enqueue', 'commit', 'trigger-sync']);
     });
 
@@ -35,7 +37,7 @@ describe('createLocalSyncMutation', () => {
         const mutation = createMutation(replica, { failEnqueue: true });
 
         await expect(
-            mutation.persistAndQueue(SyncEntity.Vehicle, async (transaction) => {
+            mutation.persistAndQueue(SyncEntity.Vehicle, SyncOperation.Upsert, async (transaction) => {
                 transaction.replica.events.push('persist');
                 transaction.replica.writes.push('vehicle-1');
                 return vehiclePayload('vehicle-1');
@@ -52,7 +54,7 @@ describe('createLocalSyncMutation', () => {
         const mutation = createMutation(replica);
 
         await expect(
-            mutation.persistAndQueue(SyncEntity.Vehicle, async () => {
+            mutation.persistAndQueue(SyncEntity.Vehicle, SyncOperation.Upsert, async () => {
                 throw new Error('Vehicle write failed.');
             }),
         ).rejects.toThrow('Vehicle write failed.');
@@ -60,6 +62,28 @@ describe('createLocalSyncMutation', () => {
         expect(replica.writes).toEqual([]);
         expect(replica.jobs).toEqual([]);
         expect(replica.events).toEqual(['begin', 'rollback']);
+    });
+
+    it('Given a deleted fuel entry, when the transaction commits, then it queues an idempotent delete payload', async () => {
+        const replica = createReplica();
+        const mutation = createMutation(replica);
+
+        await mutation.persistAndQueue(SyncEntity.FuelEntry, SyncOperation.Delete, async (transaction) => {
+            transaction.replica.events.push('delete');
+            transaction.replica.writes.push('fuel-entry-1');
+            return { clientId: 'fuel-entry-1' };
+        });
+
+        expect(replica.writes).toEqual(['fuel-entry-1']);
+        expect(replica.jobs).toEqual([
+            {
+                entityType: SyncEntity.FuelEntry,
+                operation: SyncOperation.Delete,
+                clientId: 'fuel-entry-1',
+                createdAt: CREATED_AT,
+            },
+        ]);
+        expect(replica.events).toEqual(['begin', 'delete', 'enqueue', 'commit', 'trigger-sync']);
     });
 });
 
@@ -80,12 +104,12 @@ function createMutation(replica: MemoryReplica, options: { failEnqueue?: boolean
                 throw error;
             }
         },
-        enqueue: async (entityType, payload, createdAt, transaction) => {
+        enqueue: async (entityType, operation, payload, createdAt, transaction) => {
             transaction.replica.events.push('enqueue');
             if (options.failEnqueue) {
                 throw new Error('Outbox unavailable.');
             }
-            transaction.replica.jobs.push({ entityType, clientId: payload.clientId, createdAt });
+            transaction.replica.jobs.push({ entityType, operation, clientId: payload.clientId, createdAt });
         },
         triggerQueuedSync: async () => {
             replica.events.push('trigger-sync');

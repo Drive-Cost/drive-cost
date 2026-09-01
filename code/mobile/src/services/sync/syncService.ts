@@ -1,5 +1,5 @@
-import { deleteSyncJob, getSyncJobs, markSyncJobError } from '../../database/syncRepository';
-import { decodeSyncPayload, SyncEntityType } from '../../domain/sync';
+import { deleteSyncJob, getSyncJobs, markSyncJobError, SyncJob } from '../../database/syncRepository';
+import { decodeSyncOperation, decodeSyncPayload } from '../../domain/sync';
 import { apiClient } from './apiClient';
 import { clearAuthSession, initializeAuthSession } from './authSession';
 import { pullRemoteChanges } from './pullSync/pullSync';
@@ -9,8 +9,13 @@ let activeSync: Promise<void> | null = null;
 const remoteChangeListeners = new Set<(appliedChanges: number) => Promise<void>>();
 const syncStatus = createSyncStatus(apiClient.isConfigured ? 'offline' : 'local-only');
 
-async function syncJob(job: { entityType: SyncEntityType; payload: string }): Promise<void> {
-    await apiClient.sync(job.entityType, decodeSyncPayload(job.entityType, parseSyncPayload(job.payload)));
+async function syncJob(job: SyncJob): Promise<void> {
+    const operation = decodeSyncOperation(job.entityType, job.operation);
+    await apiClient.sync(
+        job.entityType,
+        operation,
+        decodeSyncPayload(job.entityType, operation, parseSyncPayload(job.payload)),
+    );
 }
 
 function parseSyncPayload(payload: string): unknown {

@@ -13,13 +13,14 @@ import {
 } from '../services/vehicle/vehicleProfile';
 import { createMileageSnapshot } from '../services/vehicle/vehicleUsage';
 import { validateEnergyEntryForm } from '../domain/formValidation';
+import { DeleteEntryButton } from '../components/entry/DeleteEntryButton';
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function FuelScreen() {
-    const { fuelEntries, createFuelEntry, loadFuelEntries } = useFuelStore();
+    const { fuelEntries, createFuelEntry, deleteFuelEntry, loadFuelEntries } = useFuelStore();
     const { vehicles, activeVehicleId, syncVehicleOdometer } = useVehicleStore();
 
     const [liters, setLiters] = useState('');
@@ -135,8 +136,9 @@ export default function FuelScreen() {
                 {recentFuelEntries.length === 0 ? (
                     <Text style={styles.emptyHistory}>{getEnergyHistoryEmptyState(vehicle)}</Text>
                 ) : (
-                    recentFuelEntries.map((entry) => (
-                        <View key={entry.id ?? `${entry.date}-${entry.odometer}`} style={styles.historyItem}>
+                    recentFuelEntries.map((entry) => {
+                        return (
+                            <View key={entry.id ?? `${entry.date}-${entry.odometer}`} style={styles.historyItem}>
                             <View style={styles.historyCopy}>
                                 <Text style={styles.historyPrimary}>
                                     {entry.liters.toFixed(1)} {energyUnitLabel}
@@ -145,9 +147,18 @@ export default function FuelScreen() {
                                     {entry.odometer.toLocaleString()} km • {formatDate(entry.date)}
                                 </Text>
                             </View>
-                            <Text style={styles.historyAmount}>{formatCurrency(entry.price)}</Text>
-                        </View>
-                    ))
+                            <View style={styles.historyActions}>
+                                <Text style={styles.historyAmount}>{formatCurrency(entry.price)}</Text>
+                                <DeleteEntryButton
+                                    entryId={entry.id}
+                                    vehicleId={activeVehicleId}
+                                    onDelete={deleteFuelEntry}
+                                    onError={setError}
+                                />
+                            </View>
+                            </View>
+                        );
+                    })
                 )}
             </View>
         </ScrollView>
@@ -202,4 +213,5 @@ const styles = StyleSheet.create({
     historyPrimary: { fontSize: 16, fontWeight: '600', color: '#0f172a' },
     historyMeta: { marginTop: 4, color: '#475569' },
     historyAmount: { color: '#0f172a', fontWeight: '600' },
+    historyActions: { alignItems: 'flex-end', gap: 8 },
 });

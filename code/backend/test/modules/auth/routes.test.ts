@@ -68,6 +68,50 @@ test('Given a registered user, when syncing vehicle data, then ownership and val
         assert.equal(changes.statusCode, 200);
         assert.equal(changes.json().data[0].clientId, 'vehicle_1');
         assert.equal(changes.json().data[0].payload.clientId, 'vehicle_1');
+        assert.equal(changes.json().data[0].operation, 'upsert');
+
+        const fuelEntry = {
+            clientId: 'fuel_1',
+            vehicleClientId: 'vehicle_1',
+            date: '2026-09-02T12:00:00.000Z',
+            liters: 42,
+            price: 75,
+            odometer: 18_100,
+        };
+        const createdFuelEntry = await app.inject({
+            method: 'POST',
+            url: '/fuel-entries',
+            headers: { authorization: `Bearer ${accessToken}` },
+            payload: fuelEntry,
+        });
+        assert.equal(createdFuelEntry.statusCode, 201);
+
+        const deletedFuelEntry = await app.inject({
+            method: 'DELETE',
+            url: `/fuel-entries/${fuelEntry.clientId}`,
+            headers: { authorization: `Bearer ${accessToken}` },
+        });
+        assert.equal(deletedFuelEntry.statusCode, 204);
+
+        const staleFuelReplay = await app.inject({
+            method: 'POST',
+            url: '/fuel-entries',
+            headers: { authorization: `Bearer ${accessToken}` },
+            payload: fuelEntry,
+        });
+        assert.equal(staleFuelReplay.statusCode, 204);
+
+        const entryChanges = await app.inject({
+            method: 'GET',
+            url: `/sync?after=${changes.json().nextCursor}`,
+            headers: { authorization: `Bearer ${accessToken}` },
+        });
+        assert.equal(entryChanges.statusCode, 200);
+        assert.deepEqual(
+            entryChanges.json().data.map((change: { operation: string }) => change.operation),
+            ['upsert', 'delete'],
+        );
+        assert.equal(entryChanges.json().data.at(-1).payload.clientId, fuelEntry.clientId);
     } finally {
         await app.close();
     }

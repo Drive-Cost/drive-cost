@@ -1,10 +1,15 @@
-import { decodeProblemDetails, SyncRoute, SyncRouteByEntity } from '../../domain/sync';
-import type { ProblemDetails, SyncEntityType, SyncPayloadByEntity } from '../../domain/sync';
+import { decodeProblemDetails, SyncOperation, SyncRoute, SyncRouteByEntity } from '../../domain/sync';
+import type {
+    ProblemDetails,
+    SyncEntityType,
+    SyncOperationByEntity,
+    SyncPayloadByOperation,
+} from '../../domain/sync';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
 
 const REQUEST_TIMEOUT_MS = 10_000;
-const HTTP_METHOD = { Get: 'GET', Post: 'POST' } as const;
+const HTTP_METHOD = { Get: 'GET', Post: 'POST', Delete: 'DELETE' } as const;
 const JSON_CONTENT_TYPE = 'application/json';
 const SYNC_NOT_CONFIGURED_MESSAGE = 'Sync is not configured.';
 let accessToken: string | null = null;
@@ -75,7 +80,13 @@ export const apiClient = {
 
         return response;
     },
-    sync: <EntityType extends SyncEntityType>(entityType: EntityType, payload: SyncPayloadByEntity[EntityType]) =>
-        requestJson(SyncRouteByEntity[entityType], HTTP_METHOD.Post, payload),
+    sync: <EntityType extends SyncEntityType, Operation extends SyncOperationByEntity[EntityType]>(
+        entityType: EntityType,
+        operation: Operation,
+        payload: SyncPayloadByOperation<EntityType, Operation>,
+    ) =>
+        operation === SyncOperation.Delete
+            ? requestJson(`${SyncRouteByEntity[entityType]}/${encodeURIComponent(payload.clientId)}`, HTTP_METHOD.Delete)
+            : requestJson(SyncRouteByEntity[entityType], HTTP_METHOD.Post, payload),
     pullChanges: (after: number) => requestJson(`${SyncRoute.Changes}?after=${after}`, HTTP_METHOD.Get),
 };

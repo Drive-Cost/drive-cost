@@ -1,5 +1,5 @@
 import { ensureDatabase, readDatabase, upsertByClientId, writeDatabase } from '../../lib/fileDatabase';
-import { SyncEntity } from '@drivecost/contracts';
+import { SyncEntity, SyncOperation } from '@drivecost/contracts';
 import { DatabaseShape, SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
 import { DriveCostRepository, SyncEntityType } from './repository';
 
@@ -34,18 +34,24 @@ export class FileRepository implements DriveCostRepository {
     }
 
     async listEntities(userId: string, entityType: SyncEntityType): Promise<SyncedRecord[]> {
-        return this.collection(readDatabase(), entityType).filter((record) => record.userId === userId);
+        return this.collection(readDatabase(), entityType).filter((record) => record.userId === userId && !record.deletedAt);
     }
 
     async entityExists(userId: string, entityType: SyncEntityType, clientId: string): Promise<boolean> {
         return (await this.listEntities(userId, entityType)).some((record) => record.clientId === clientId);
     }
 
-    async upsertEntity(userId: string, entityType: SyncEntityType, payload: object): Promise<SyncedRecord> {
+    async upsertEntity(userId: string, entityType: SyncEntityType, payload: object): Promise<SyncedRecord | null> {
         const database = readDatabase();
+        const collection = this.collection(database, entityType);
         const { clientId: _clientId, ...attributes } = payload as Record<string, unknown>;
+        const clientId = requiredClientId(payload);
+        const existingRecord = collection.find((record) => record.userId === userId && record.clientId === clientId);
+        if (existingRecord?.deletedAt) {
+            return null;
+        }
         const record = upsertByClientId(
-            this.collection(database, entityType),
+            collection,
             idPrefixByEntityType[entityType],
             userId,
             payload,
@@ -54,6 +60,7 @@ export class FileRepository implements DriveCostRepository {
             sequence: database.syncChanges.length + 1,
             userId,
             entityType,
+            operation: SyncOperation.Upsert,
             entityId: record.id,
             clientId: record.clientId,
             payload: { clientId: record.clientId, ...attributes },
@@ -63,9 +70,37 @@ export class FileRepository implements DriveCostRepository {
         return record;
     }
 
+    async deleteEntity(
+        userId: string,
+        entityType: Exclude<SyncEntityType, 'vehicle'>,
+        clientId: string,
+    ): Promise<void> {
+        const database = readDatabase();
+        const collection = this.collection(database, entityType);
+        const existingRecord = collection.find((record) => record.userId === userId && record.clientId === clientId);
+        if (existingRecord?.deletedAt) {
+            return;
+        }
+
+        const deletedAt = new Date().toISOString();
+        const record = upsertByClientId(collection, idPrefixByEntityType[entityType], userId, { clientId, deletedAt });
+        database.syncChanges.push({
+            sequence: database.syncChanges.length + 1,
+            userId,
+            entityType,
+            operation: SyncOperation.Delete,
+            entityId: record.id,
+            clientId,
+            payload: { clientId },
+            createdAt: deletedAt,
+        });
+        writeDatabase(database);
+    }
+
     async listChanges(userId: string, after: number, limit: number): Promise<SyncChange[]> {
         return readDatabase()
             .syncChanges.filter((change) => change.userId === userId && change.sequence > after)
+            .map((change) => ({ ...change, operation: change.operation ?? SyncOperation.Upsert }))
             .slice(0, limit);
     }
 
@@ -74,4 +109,12 @@ export class FileRepository implements DriveCostRepository {
     private collection(database: DatabaseShape, entityType: SyncEntityType) {
         return database[collectionByEntityType[entityType]];
     }
+}
+
+function requiredClientId(payload: object): string {
+    const clientId = (payload as { clientId?: unknown }).clientId;
+    if (typeof clientId !== 'string' || !clientId) {
+        throw new Error('A sync entity requires a clientId.');
+    }
+    return clientId;
 }

@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { SyncOperation } from '../domain/sync';
 
 export const db = SQLite.openDatabaseSync('drivecost.db');
 
@@ -122,6 +123,13 @@ export const initDatabase = () => {
     addColumnIfMissing('maintenance_entries', 'clientId', 'TEXT');
     addColumnIfMissing('sync_queue', 'retryCount', 'INTEGER NOT NULL DEFAULT 0');
     addColumnIfMissing('sync_queue', 'nextAttemptAt', 'TEXT');
+
+    db.execSync(
+        `UPDATE sync_queue
+         SET operation = '${SyncOperation.Upsert}'
+         WHERE operation IS NULL
+            OR operation NOT IN ('${SyncOperation.Upsert}', '${SyncOperation.Delete}');`,
+    );
 
     // Existing local data predates sync. Assign stable identifiers once so that
     // future retries and edits target the same remote record.

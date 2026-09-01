@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { decodeProblemDetails, decodePullResponse, SyncEntity } from '../../src/domain/sync';
+import { decodeProblemDetails, decodePullResponse, SyncEntity, SyncOperation } from '../../src/domain/sync';
 
 describe('decodePullResponse', () => {
     it('Given an ordered vehicle change, when decoding the response, then returns the canonical contract', () => {
         const response = decodePullResponse(
-            { data: [{ sequence: 8, entityType: SyncEntity.Vehicle, payload: vehiclePayload() }], nextCursor: 8 },
+            {
+                data: [{ sequence: 8, entityType: SyncEntity.Vehicle, operation: SyncOperation.Upsert, payload: vehiclePayload() }],
+                nextCursor: 8,
+            },
             7,
         );
 
         expect(response).toEqual({
-            data: [{ sequence: 8, entityType: SyncEntity.Vehicle, payload: vehiclePayload() }],
+            data: [{ sequence: 8, entityType: SyncEntity.Vehicle, operation: SyncOperation.Upsert, payload: vehiclePayload() }],
             nextCursor: 8,
         });
     });
@@ -17,7 +20,10 @@ describe('decodePullResponse', () => {
     it('Given an unsupported entity, when decoding the response, then rejects the protocol violation', () => {
         expect(() =>
             decodePullResponse(
-                { data: [{ sequence: 8, entityType: 'unknown', payload: vehiclePayload() }], nextCursor: 8 },
+                {
+                    data: [{ sequence: 8, entityType: 'unknown', operation: SyncOperation.Upsert, payload: vehiclePayload() }],
+                    nextCursor: 8,
+                },
                 7,
             ),
         ).toThrow('Unsupported sync entity.');
@@ -28,14 +34,67 @@ describe('decodePullResponse', () => {
             decodePullResponse(
                 {
                     data: [
-                        { sequence: 9, entityType: SyncEntity.Vehicle, payload: vehiclePayload() },
-                        { sequence: 8, entityType: SyncEntity.Vehicle, payload: vehiclePayload('vehicle-2') },
+                        { sequence: 9, entityType: SyncEntity.Vehicle, operation: SyncOperation.Upsert, payload: vehiclePayload() },
+                        {
+                            sequence: 8,
+                            entityType: SyncEntity.Vehicle,
+                            operation: SyncOperation.Upsert,
+                            payload: vehiclePayload('vehicle-2'),
+                        },
                     ],
                     nextCursor: 8,
                 },
                 7,
             ),
         ).toThrow('Sync changes must be ordered by sequence.');
+    });
+
+    it('Given an entry tombstone, when decoding the response, then keeps its delete operation and client ID', () => {
+        expect(
+            decodePullResponse(
+                {
+                    data: [
+                        {
+                            sequence: 8,
+                            entityType: SyncEntity.FuelEntry,
+                            operation: SyncOperation.Delete,
+                            payload: { clientId: 'fuel-1' },
+                        },
+                    ],
+                    nextCursor: 8,
+                },
+                7,
+            ),
+        ).toEqual({
+            data: [
+                {
+                    sequence: 8,
+                    entityType: SyncEntity.FuelEntry,
+                    operation: SyncOperation.Delete,
+                    payload: { clientId: 'fuel-1' },
+                },
+            ],
+            nextCursor: 8,
+        });
+    });
+
+    it('Given a vehicle deletion, when decoding the response, then rejects the unsupported operation', () => {
+        expect(() =>
+            decodePullResponse(
+                {
+                    data: [
+                        {
+                            sequence: 8,
+                            entityType: SyncEntity.Vehicle,
+                            operation: SyncOperation.Delete,
+                            payload: { clientId: 'vehicle-1' },
+                        },
+                    ],
+                    nextCursor: 8,
+                },
+                7,
+            ),
+        ).toThrow('Unsupported sync operation.');
     });
 });
 

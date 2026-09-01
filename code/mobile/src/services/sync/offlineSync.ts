@@ -6,8 +6,8 @@ import { createLocalSyncMutation } from './localMutation';
 
 const localSyncMutation = createLocalSyncMutation<SQLite.SQLiteDatabase>({
     withTransaction: (operation) => db.withExclusiveTransactionAsync(operation),
-    enqueue: async (entityType, payload, createdAt, transaction) => {
-        await enqueueSyncJob({ entityType, payload: JSON.stringify(payload), createdAt }, transaction);
+    enqueue: async (entityType, operation, payload, createdAt, transaction) => {
+        await enqueueSyncJob({ entityType, operation, payload: JSON.stringify(payload), createdAt }, transaction);
     },
     triggerQueuedSync: requestQueuedSync,
     now: () => new Date().toISOString(),

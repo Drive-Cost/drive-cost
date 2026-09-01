@@ -6,10 +6,12 @@ export {
     decodeProblemDetails,
     decodePullResponse,
     decodeSyncEntity,
+    decodeSyncOperation,
     decodeSyncPayload,
 } from '@drivecost/contracts';
 
 export type {
+    DeleteSyncPayload,
     FuelEntrySyncPayload,
     MaintenanceEntrySyncPayload,
     PullResponse,
@@ -18,5 +20,7 @@ export type {
     SyncEntityType,
     SyncPayload,
     SyncPayloadByEntity,
+    SyncPayloadByOperation,
+    SyncOperationByEntity,
     VehicleSyncPayload,
 } from '@drivecost/contracts';

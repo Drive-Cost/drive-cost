@@ -1,13 +1,10 @@
 import { db } from './db';
-import { SyncEntityType, SyncOperation } from '../domain/sync';
+import { SyncEntityType, SyncOperationByEntity } from '../domain/sync';
 import { nextRetryAt } from '../services/sync/retryPolicy';
 import * as SQLite from 'expo-sqlite';
 
-const OUTBOX_OPERATION = SyncOperation.Upsert;
-
-export interface SyncJob {
+interface SyncJobBase {
     id?: number;
-    entityType: SyncEntityType;
     payload: string;
     createdAt: string;
     lastError?: string | null;
@@ -15,8 +12,17 @@ export interface SyncJob {
     nextAttemptAt?: string | null;
 }
 
-export const enqueueSyncJob = async (
-    job: Omit<SyncJob, 'id'>,
+export type SyncJobForEntity<EntityType extends SyncEntityType> = SyncJobBase & {
+    entityType: EntityType;
+    operation: SyncOperationByEntity[EntityType];
+};
+
+export type SyncJob = {
+    [EntityType in SyncEntityType]: SyncJobForEntity<EntityType>;
+}[SyncEntityType];
+
+export const enqueueSyncJob = async <EntityType extends SyncEntityType>(
+    job: Omit<SyncJobForEntity<EntityType>, 'id'>,
     database: SQLite.SQLiteDatabase = db,
 ): Promise<void> => {
     await database.runAsync(
@@ -26,7 +32,7 @@ export const enqueueSyncJob = async (
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
         job.entityType,
-        OUTBOX_OPERATION,
+        job.operation,
         job.payload,
         job.createdAt,
         job.lastError ?? null,
@@ -51,7 +57,7 @@ export const deleteSyncJob = async (jobId: number): Promise<void> => {
 };
 
 export const markSyncJobError = async (
-    job: Required<Pick<SyncJob, 'id'>> & Pick<SyncJob, 'retryCount'>,
+    job: Required<Pick<SyncJobBase, 'id'>> & Pick<SyncJobBase, 'retryCount'>,
     message: string,
 ): Promise<void> => {
     const retryCount = (job.retryCount ?? 0) + 1;

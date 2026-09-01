@@ -9,7 +9,8 @@ export interface DriveCostRepository {
     createUser(user: UserRecord): Promise<void>;
     listEntities(userId: string, entityType: SyncEntityType): Promise<SyncedRecord[]>;
     entityExists(userId: string, entityType: SyncEntityType, clientId: string): Promise<boolean>;
-    upsertEntity(userId: string, entityType: SyncEntityType, payload: object): Promise<SyncedRecord>;
+    upsertEntity(userId: string, entityType: SyncEntityType, payload: object): Promise<SyncedRecord | null>;
+    deleteEntity(userId: string, entityType: Exclude<SyncEntityType, 'vehicle'>, clientId: string): Promise<void>;
     listChanges(userId: string, after: number, limit: number): Promise<SyncChange[]>;
     close(): Promise<void>;
 }

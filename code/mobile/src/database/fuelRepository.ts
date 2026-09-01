@@ -3,6 +3,7 @@ import { db } from './db';
 import { FuelEntrySyncPayload } from '../domain/sync';
 import * as SQLite from 'expo-sqlite';
 import { findVehicleIdByClientId } from './vehicleLookup';
+import { requirePersistedClientId } from './clientId';
 
 export const addFuelEntry = async (
     fuelEntry: FuelEntry,
@@ -26,6 +27,26 @@ export const getFuelEntries = async (vehicleId: number): Promise<FuelEntry[]> =>
         `SELECT * FROM fuel_entries WHERE vehicleId = ? ORDER BY date DESC, id DESC`,
         vehicleId,
     );
+};
+
+export const deleteFuelEntryById = async (
+    entryId: number,
+    database: SQLite.SQLiteDatabase = db,
+): Promise<string> => {
+    const entry = await database.getFirstAsync<Pick<FuelEntry, 'clientId'>>(
+        'SELECT clientId FROM fuel_entries WHERE id = ?',
+        entryId,
+    );
+    const clientId = requirePersistedClientId(entry?.clientId, 'Fuel entry');
+    await database.runAsync('DELETE FROM fuel_entries WHERE id = ?', entryId);
+    return clientId;
+};
+
+export const deleteFuelEntryFromSync = async (
+    clientId: string,
+    database: SQLite.SQLiteDatabase = db,
+): Promise<void> => {
+    await database.runAsync('DELETE FROM fuel_entries WHERE clientId = ?', clientId);
 };
 
 export const upsertFuelEntryFromSync = async (
