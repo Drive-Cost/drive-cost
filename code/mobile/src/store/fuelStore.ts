@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { addFuelEntry, getFuelEntries } from '../database/fuelRepository';
 import { FuelEntry } from '../models/FuelEntry';
-import { queueSyncJob } from '../services/sync/offlineSync';
+import { persistAndQueueSync } from '../services/sync/offlineSync';
 import { toFuelEntrySyncPayload } from '../services/sync/syncPayload';
 import { createClientId } from '../domain/identity';
-import { getVehicleById } from '../database/vehicleRepository';
 import { SyncEntity } from '../domain/sync';
+import { requireVehicleClientId } from '../services/sync/vehicleClientId';
 
 interface FuelState {
     fuelEntries: FuelEntry[];
@@ -23,14 +23,11 @@ export const useFuelStore = create<FuelState>((set) => ({
 
     createFuelEntry: async (entry) => {
         const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.FuelEntry) };
-        const vehicle = await getVehicleById(entry.vehicleId);
-
-        if (!vehicle?.clientId) {
-            throw new Error('The vehicle could not be prepared for sync.');
-        }
-
-        await addFuelEntry(entryToCreate);
-        await queueSyncJob(SyncEntity.FuelEntry, toFuelEntrySyncPayload(entryToCreate, vehicle.clientId));
+        await persistAndQueueSync(SyncEntity.FuelEntry, async (transaction) => {
+            const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
+            await addFuelEntry(entryToCreate, transaction);
+            return toFuelEntrySyncPayload(entryToCreate, vehicleClientId);
+        });
         const entries = await getFuelEntries(entry.vehicleId);
         set({ fuelEntries: entries });
     },

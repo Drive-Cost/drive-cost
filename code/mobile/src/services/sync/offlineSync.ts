@@ -1,13 +1,21 @@
+import * as SQLite from 'expo-sqlite';
+import { db } from '../../database/db';
 import { enqueueSyncJob } from '../../database/syncRepository';
-import { SyncEntityType, SyncPayloadByEntity } from '../../domain/sync';
 import { processSyncQueue } from './syncService';
+import { createLocalSyncMutation } from './localMutation';
 
-export async function queueSyncJob<EntityType extends SyncEntityType>(
-    entityType: EntityType,
-    payload: SyncPayloadByEntity[EntityType],
-) {
-    await enqueueSyncJob({ entityType, payload: JSON.stringify(payload), createdAt: new Date().toISOString() });
+const localSyncMutation = createLocalSyncMutation<SQLite.SQLiteDatabase>({
+    withTransaction: (operation) => db.withExclusiveTransactionAsync(operation),
+    enqueue: async (entityType, payload, createdAt, transaction) => {
+        await enqueueSyncJob({ entityType, payload: JSON.stringify(payload), createdAt }, transaction);
+    },
+    triggerQueuedSync: requestQueuedSync,
+    now: () => new Date().toISOString(),
+});
 
+export const persistAndQueueSync = localSyncMutation.persistAndQueue;
+
+async function requestQueuedSync(): Promise<void> {
     try {
         await processSyncQueue();
     } catch {

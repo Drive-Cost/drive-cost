@@ -22,7 +22,7 @@ Status: in progress.
 - [x] Add unit tests for cost calculations and form validation.
 - [x] Add CI to run type checks and tests on every pull request.
 - [x] Add deterministic sync retry policy tests without requiring Expo runtime.
-- [ ] Commit a local write and its outbox job in one SQLite transaction.
+- [x] Commit a local write and its outbox job in one SQLite transaction.
 
 ## Phase 2: Honest Local Product
 

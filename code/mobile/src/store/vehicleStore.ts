@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 import { Vehicle } from '../models/Vehicle';
-import { addVehicle, getVehicles, updateVehicleCurrentOdometer, updateVehicle } from '../database/vehicleRepository';
-import { queueSyncJob } from '../services/sync/offlineSync';
+import {
+    addVehicle,
+    getVehicles,
+    updateVehicleCurrentOdometer,
+    updateVehicle,
+} from '../database/vehicleRepository';
+import { persistAndQueueSync } from '../services/sync/offlineSync';
 import { toVehicleSyncPayload } from '../services/sync/syncPayload';
+import { requireVehicleForSync } from '../services/sync/vehicleClientId';
 import { createClientId } from '../domain/identity';
 import { SyncEntity } from '../domain/sync';
 
@@ -35,8 +41,10 @@ export const useVehicleStore = create<VehicleState>((set) => ({
 
     createVehicle: async (vehicle) => {
         const vehicleToCreate = { ...vehicle, clientId: createClientId(SyncEntity.Vehicle) };
-        await addVehicle(vehicleToCreate);
-        await queueSyncJob(SyncEntity.Vehicle, toVehicleSyncPayload(vehicleToCreate));
+        await persistAndQueueSync(SyncEntity.Vehicle, async (transaction) => {
+            await addVehicle(vehicleToCreate, transaction);
+            return toVehicleSyncPayload(vehicleToCreate);
+        });
         const vehicles = await getVehicles();
 
         set({ vehicles, activeVehicleId: vehicles[vehicles.length - 1].id });
@@ -44,8 +52,10 @@ export const useVehicleStore = create<VehicleState>((set) => ({
 
     saveVehicle: async (vehicle) => {
         const vehicleToSave = { ...vehicle, clientId: vehicle.clientId ?? createClientId(SyncEntity.Vehicle) };
-        await updateVehicle(vehicleToSave);
-        await queueSyncJob(SyncEntity.Vehicle, toVehicleSyncPayload(vehicleToSave));
+        await persistAndQueueSync(SyncEntity.Vehicle, async (transaction) => {
+            await updateVehicle(vehicleToSave, transaction);
+            return toVehicleSyncPayload(vehicleToSave);
+        });
         const vehicles = await getVehicles();
 
         set((state) => ({ vehicles, activeVehicleId: state.activeVehicleId ?? vehicle.id ?? null }));
@@ -54,13 +64,12 @@ export const useVehicleStore = create<VehicleState>((set) => ({
     setActiveVehicle: (id) => set({ activeVehicleId: id }),
 
     syncVehicleOdometer: async (vehicleId, odometer) => {
-        await updateVehicleCurrentOdometer(vehicleId, odometer);
+        await persistAndQueueSync(SyncEntity.Vehicle, async (transaction) => {
+            await updateVehicleCurrentOdometer(vehicleId, odometer, transaction);
+            const updatedVehicle = await requireVehicleForSync(vehicleId, transaction);
+            return toVehicleSyncPayload(updatedVehicle);
+        });
         const vehicles = await getVehicles();
-
-        const updatedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleId);
-        if (updatedVehicle) {
-            await queueSyncJob(SyncEntity.Vehicle, toVehicleSyncPayload(updatedVehicle));
-        }
 
         set((state) => ({ vehicles, activeVehicleId: state.activeVehicleId ?? vehicleId }));
     },

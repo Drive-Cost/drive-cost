@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { addMaintenanceEntry, getMaintenanceEntries } from '../database/maintenanceRepository';
 import { MaintenanceEntry } from '../models/MaintenanceEntry';
-import { queueSyncJob } from '../services/sync/offlineSync';
+import { persistAndQueueSync } from '../services/sync/offlineSync';
 import { toMaintenanceEntrySyncPayload } from '../services/sync/syncPayload';
 import { createClientId } from '../domain/identity';
-import { getVehicleById } from '../database/vehicleRepository';
 import { SyncEntity } from '../domain/sync';
+import { requireVehicleClientId } from '../services/sync/vehicleClientId';
 
 interface MaintenanceState {
     maintenanceEntries: MaintenanceEntry[];
@@ -23,14 +23,11 @@ export const useMaintenanceStore = create<MaintenanceState>((set) => ({
 
     createMaintenanceEntry: async (entry) => {
         const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.MaintenanceEntry) };
-        const vehicle = await getVehicleById(entry.vehicleId);
-
-        if (!vehicle?.clientId) {
-            throw new Error('The vehicle could not be prepared for sync.');
-        }
-
-        await addMaintenanceEntry(entryToCreate);
-        await queueSyncJob(SyncEntity.MaintenanceEntry, toMaintenanceEntrySyncPayload(entryToCreate, vehicle.clientId));
+        await persistAndQueueSync(SyncEntity.MaintenanceEntry, async (transaction) => {
+            const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
+            await addMaintenanceEntry(entryToCreate, transaction);
+            return toMaintenanceEntrySyncPayload(entryToCreate, vehicleClientId);
+        });
         const entries = await getMaintenanceEntries(entry.vehicleId);
         set({ maintenanceEntries: entries });
     },

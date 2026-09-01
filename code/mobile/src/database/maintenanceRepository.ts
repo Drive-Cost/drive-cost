@@ -4,8 +4,11 @@ import { MaintenanceEntrySyncPayload } from '../domain/sync';
 import * as SQLite from 'expo-sqlite';
 import { findVehicleIdByClientId } from './vehicleLookup';
 
-export const addMaintenanceEntry = async (maintenanceEntry: MaintenanceEntry): Promise<void> => {
-    await db.runAsync(
+export const addMaintenanceEntry = async (
+    maintenanceEntry: MaintenanceEntry,
+    database: SQLite.SQLiteDatabase = db,
+): Promise<void> => {
+    await database.runAsync(
         `INSERT INTO maintenance_entries
       (clientId, vehicleId, type, description, cost, date, odometer)
       VALUES (?, ?, ?, ?, ?, ?, ?)`,

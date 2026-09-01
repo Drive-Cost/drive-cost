@@ -1,6 +1,7 @@
 import { db } from './db';
 import { SyncEntityType, SyncOperation } from '../domain/sync';
 import { nextRetryAt } from '../services/sync/retryPolicy';
+import * as SQLite from 'expo-sqlite';
 
 const OUTBOX_OPERATION = SyncOperation.Upsert;
 
@@ -14,8 +15,11 @@ export interface SyncJob {
     nextAttemptAt?: string | null;
 }
 
-export const enqueueSyncJob = async (job: Omit<SyncJob, 'id'>): Promise<void> => {
-    await db.runAsync(
+export const enqueueSyncJob = async (
+    job: Omit<SyncJob, 'id'>,
+    database: SQLite.SQLiteDatabase = db,
+): Promise<void> => {
+    await database.runAsync(
         `
       INSERT INTO sync_queue (
         entityType, operation, payload, createdAt, lastError, retryCount, nextAttemptAt
