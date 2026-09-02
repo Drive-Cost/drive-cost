@@ -4,8 +4,16 @@ import DashboardScreen from '../screens/DashboardScreen';
 import GarageStack from './GarageStack';
 import FuelScreen from '../screens/FuelScreen';
 import MaintenanceScreen from '../screens/MaintenanceScreen';
+import { AppTabParamList } from './types';
 
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<AppTabParamList>();
+
+const TAB_ICONS: Record<keyof AppTabParamList, { active: string; inactive: string }> = {
+    Dashboard: { active: '▦', inactive: '◫' },
+    Garage: { active: '⌂', inactive: '⌂' },
+    Fuel: { active: '⛽', inactive: '⛽' },
+    Maintenance: { active: '⚙', inactive: '⚙' },
+};
 
 export default function AppNavigator() {
     return (
@@ -26,22 +34,7 @@ export default function AppNavigator() {
                 tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
                 tabBarIcon: ({ color, size, focused }) => {
                     const iconSize = focused ? size + 1 : size;
-                    let icon = '◫';
-
-                    switch (route.name) {
-                        case 'Dashboard':
-                            icon = focused ? '▦' : '◫';
-                            break;
-                        case 'Garage':
-                            icon = '⌂';
-                            break;
-                        case 'Fuel':
-                            icon = '⛽';
-                            break;
-                        case 'Maintenance':
-                            icon = '⚙';
-                            break;
-                    }
+                    const icon = TAB_ICONS[route.name][focused ? 'active' : 'inactive'];
 
                     return <Text style={{ color, fontSize: iconSize }}>{icon}</Text>;
                 },

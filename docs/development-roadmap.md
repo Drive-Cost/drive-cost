@@ -18,7 +18,7 @@ Status: in progress.
 - [x] Stop assuming a localhost backend exists in every installed app.
 - [x] Add type-check commands for the mobile and backend modules.
 - [x] Validate form input and odometer invariants before a database write.
-- [ ] Replace untyped navigation and unsafe casts with typed route parameters.
+- [x] Replace untyped navigation and unsafe casts with typed route parameters.
 - [x] Add unit tests for cost calculations and form validation.
 - [x] Add CI to run type checks and tests on every pull request.
 - [x] Add deterministic sync retry policy tests without requiring Expo runtime.

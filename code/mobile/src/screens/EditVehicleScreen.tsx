@@ -1,14 +1,15 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { VehicleForm, VehicleFormMode } from '../components/vehicle/VehicleForm';
 import { useVehicleStore } from '../store/vehicleStore';
+import { GarageStackParamList } from '../navigation/types';
 
-export default function EditVehicleScreen() {
-    const navigation = useNavigation();
-    const route = useRoute();
+type EditVehicleScreenProps = NativeStackScreenProps<GarageStackParamList, 'EditVehicle'>;
+
+export default function EditVehicleScreen({ navigation, route }: EditVehicleScreenProps) {
     const { vehicles, saveVehicle } = useVehicleStore();
-    const vehicleId = readVehicleId(route.params);
+    const { vehicleId } = route.params;
     const vehicle = useMemo(() => vehicles.find((item) => item.id === vehicleId), [vehicleId, vehicles]);
 
     if (!vehicle) {
@@ -38,12 +39,6 @@ export default function EditVehicleScreen() {
             />
         </View>
     );
-}
-
-function readVehicleId(params: unknown): number | null {
-    if (!params || typeof params !== 'object' || !('vehicleId' in params)) return null;
-    const vehicleId = (params as { vehicleId?: unknown }).vehicleId;
-    return typeof vehicleId === 'number' ? vehicleId : null;
 }
 
 const styles = StyleSheet.create({

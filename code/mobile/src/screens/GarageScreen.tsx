@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useVehicleStore } from '../store/vehicleStore';
+import { GarageStackParamList } from '../navigation/types';
 
-export default function GarageScreen() {
+type GarageScreenProps = NativeStackScreenProps<GarageStackParamList, 'GarageHome'>;
+
+export default function GarageScreen({ navigation }: GarageScreenProps) {
     const { vehicles, loadVehicles, setActiveVehicle, activeVehicleId } = useVehicleStore();
-
-    const navigation = useNavigation<any>();
 
     useEffect(() => {
         loadVehicles();
@@ -19,7 +20,7 @@ export default function GarageScreen() {
                 <Text style={styles.subtitle}>Choose the car you want DriveCost to track.</Text>
             </View>
 
-            <Pressable style={styles.addButton} onPress={() => navigation.navigate('AddVehicle' as never)}>
+            <Pressable style={styles.addButton} onPress={() => navigation.navigate('AddVehicle')}>
                 <Text style={styles.addButtonText}>Add vehicle</Text>
             </Pressable>
 
@@ -36,51 +37,54 @@ export default function GarageScreen() {
                         </Text>
                     </View>
                 }
-                renderItem={({ item }) => (
-                    <View style={[styles.vehicleCard, item.id === activeVehicleId && styles.vehicleCardActive]}>
-                        <Pressable onPress={() => setActiveVehicle(item.id!)}>
-                            <Text style={styles.vehicleName}>{item.label || `${item.brand} ${item.model}`}</Text>
-                            <Text style={styles.vehicleMeta}>
-                                {item.brand} {item.model} • {item.year}
-                            </Text>
-                            {item.fuelType || item.engine || item.powerHp || item.transmission ? (
-                                <Text style={styles.vehicleSpec}>
-                                    {[
-                                        item.fuelType,
-                                        item.engine,
-                                        item.powerHp ? `${item.powerHp} hp` : null,
-                                        item.transmission,
-                                    ]
-                                        .filter(Boolean)
-                                        .join(' • ')}
+                renderItem={({ item }) => {
+                    if (item.id === undefined) return null;
+                    const vehicleId = item.id;
+
+                    return (
+                        <View style={[styles.vehicleCard, vehicleId === activeVehicleId && styles.vehicleCardActive]}>
+                            <Pressable onPress={() => setActiveVehicle(vehicleId)}>
+                                <Text style={styles.vehicleName}>{item.label || `${item.brand} ${item.model}`}</Text>
+                                <Text style={styles.vehicleMeta}>
+                                    {item.brand} {item.model} • {item.year}
                                 </Text>
-                            ) : null}
-                            <Text style={styles.vehicleMeta}>Odometer {item.currentOdometer.toLocaleString()} km</Text>
-                            <Text style={styles.vehicleMeta}>
-                                Ownership start {item.ownershipStartMileage.toLocaleString()} km
-                            </Text>
-                            <Text style={styles.vehicleMeta}>
-                                Tracking start {item.trackingStartMileage.toLocaleString()} km
-                            </Text>
-                            {item.id === activeVehicleId ? <Text style={styles.activeTag}>Active vehicle</Text> : null}
-                        </Pressable>
-
-                        <View style={styles.cardActions}>
-                            <Pressable style={styles.secondaryButton} onPress={() => setActiveVehicle(item.id!)}>
-                                <Text style={styles.secondaryButtonText}>Set active</Text>
+                                {item.fuelType || item.engine || item.powerHp || item.transmission ? (
+                                    <Text style={styles.vehicleSpec}>
+                                        {[
+                                            item.fuelType,
+                                            item.engine,
+                                            item.powerHp ? `${item.powerHp} hp` : null,
+                                            item.transmission,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(' • ')}
+                                    </Text>
+                                ) : null}
+                                <Text style={styles.vehicleMeta}>Odometer {item.currentOdometer.toLocaleString()} km</Text>
+                                <Text style={styles.vehicleMeta}>
+                                    Ownership start {item.ownershipStartMileage.toLocaleString()} km
+                                </Text>
+                                <Text style={styles.vehicleMeta}>
+                                    Tracking start {item.trackingStartMileage.toLocaleString()} km
+                                </Text>
+                                {vehicleId === activeVehicleId ? <Text style={styles.activeTag}>Active vehicle</Text> : null}
                             </Pressable>
 
-                            <Pressable
-                                style={styles.secondaryButton}
-                                onPress={() =>
-                                    navigation.navigate('EditVehicle' as never, { vehicleId: item.id } as never)
-                                }
-                            >
-                                <Text style={styles.secondaryButtonText}>Edit</Text>
-                            </Pressable>
+                            <View style={styles.cardActions}>
+                                <Pressable style={styles.secondaryButton} onPress={() => setActiveVehicle(vehicleId)}>
+                                    <Text style={styles.secondaryButtonText}>Set active</Text>
+                                </Pressable>
+
+                                <Pressable
+                                    style={styles.secondaryButton}
+                                    onPress={() => navigation.navigate('EditVehicle', { vehicleId })}
+                                >
+                                    <Text style={styles.secondaryButtonText}>Edit</Text>
+                                </Pressable>
+                            </View>
                         </View>
-                    </View>
-                )}
+                    );
+                }}
             />
         </View>
     );

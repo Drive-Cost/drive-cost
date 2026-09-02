@@ -1,10 +1,12 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { VehicleForm, VehicleFormMode } from '../components/vehicle/VehicleForm';
 import { useVehicleStore } from '../store/vehicleStore';
+import { GarageStackParamList } from '../navigation/types';
 
-export default function AddVehicleScreen() {
-    const navigation = useNavigation();
+type AddVehicleScreenProps = NativeStackScreenProps<GarageStackParamList, 'AddVehicle'>;
+
+export default function AddVehicleScreen({ navigation }: AddVehicleScreenProps) {
     const { createVehicle } = useVehicleStore();
 
     return (
