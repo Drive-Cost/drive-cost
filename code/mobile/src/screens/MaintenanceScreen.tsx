@@ -9,16 +9,9 @@ import { DeleteEntryButton } from '../components/entry/DeleteEntryButton';
 import { EditEntryButton } from '../components/entry/EditEntryButton';
 import { MaintenanceEntry } from '../models/MaintenanceEntry';
 import { useEntryEditor } from '../components/entry/useEntryEditor';
+import type { EntryForm } from '../components/entry/useEntryEditor';
 import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../components/entry/entryError';
 import { ENTRY_DATE_PLACEHOLDER, toCalendarDate, todayCalendarDate } from '../domain/entryDate';
-
-interface MaintenanceFormInput {
-    date: string;
-    type: string;
-    description: string;
-    cost: string;
-    odometer: string;
-}
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -241,7 +234,7 @@ export default function MaintenanceScreen() {
     );
 }
 
-function toMaintenanceFormInput(entry: MaintenanceEntry): MaintenanceFormInput {
+function toMaintenanceFormInput(entry: MaintenanceEntry): EntryForm {
     return {
         date: toCalendarDate(entry.date),
         type: entry.type,
@@ -251,7 +244,7 @@ function toMaintenanceFormInput(entry: MaintenanceEntry): MaintenanceFormInput {
     };
 }
 
-function createEmptyMaintenanceForm(): MaintenanceFormInput {
+function createEmptyMaintenanceForm(): EntryForm {
     return { date: todayCalendarDate(), type: '', description: '', cost: '', odometer: '' };
 }
 

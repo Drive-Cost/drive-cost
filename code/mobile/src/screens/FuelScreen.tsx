@@ -17,15 +17,9 @@ import { DeleteEntryButton } from '../components/entry/DeleteEntryButton';
 import { EditEntryButton } from '../components/entry/EditEntryButton';
 import { FuelEntry } from '../models/FuelEntry';
 import { useEntryEditor } from '../components/entry/useEntryEditor';
+import type { EntryForm } from '../components/entry/useEntryEditor';
 import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../components/entry/entryError';
 import { ENTRY_DATE_PLACEHOLDER, toCalendarDate, todayCalendarDate } from '../domain/entryDate';
-
-interface FuelFormInput {
-    date: string;
-    liters: string;
-    price: string;
-    odometer: string;
-}
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -232,7 +226,7 @@ export default function FuelScreen() {
     );
 }
 
-function toFuelFormInput(entry: FuelEntry): FuelFormInput {
+function toFuelFormInput(entry: FuelEntry): EntryForm {
     return {
         date: toCalendarDate(entry.date),
         liters: String(entry.liters),
@@ -241,7 +235,7 @@ function toFuelFormInput(entry: FuelEntry): FuelFormInput {
     };
 }
 
-function createEmptyFuelForm(): FuelFormInput {
+function createEmptyFuelForm(): EntryForm {
     return { date: todayCalendarDate(), liters: '', price: '', odometer: '' };
 }
 

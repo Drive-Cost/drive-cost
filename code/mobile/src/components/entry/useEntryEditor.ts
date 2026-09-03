@@ -5,17 +5,16 @@ interface EditableEntry {
     vehicleId: number;
 }
 
-export function useEntryEditor<
-    Entry extends EditableEntry,
-    FormInput extends { [Field in keyof FormInput]: string },
->(
-    createEmptyForm: () => FormInput,
-    toFormInput: (entry: Entry) => FormInput,
+export type EntryForm = Record<string, string>;
+
+export function useEntryEditor<Entry extends EditableEntry>(
+    createEmptyForm: () => EntryForm,
+    toFormInput: (entry: Entry) => EntryForm,
 ) {
     const [formInput, setFormInput] = useState(createEmptyForm);
     const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
 
-    const updateFormInput = useCallback(<Field extends keyof FormInput>(field: Field, value: FormInput[Field]) => {
+    const updateFormInput = useCallback((field: string, value: string) => {
         setFormInput((current) => ({ ...current, [field]: value }));
     }, []);
 
