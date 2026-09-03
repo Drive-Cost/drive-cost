@@ -18,14 +18,14 @@ import { EditEntryButton } from '../components/entry/EditEntryButton';
 import { FuelEntry } from '../models/FuelEntry';
 import { useEntryEditor } from '../components/entry/useEntryEditor';
 import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../components/entry/entryError';
+import { ENTRY_DATE_PLACEHOLDER, toCalendarDate, todayCalendarDate } from '../domain/entryDate';
 
 interface FuelFormInput {
+    date: string;
     liters: string;
     price: string;
     odometer: string;
 }
-
-const EMPTY_FUEL_FORM: FuelFormInput = { liters: '', price: '', odometer: '' };
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -44,7 +44,7 @@ export default function FuelScreen() {
         startEditing,
         cancelIfVehicleChanged,
         clearIfEditing,
-    } = useEntryEditor(EMPTY_FUEL_FORM, toFuelFormInput);
+    } = useEntryEditor(createEmptyFuelForm, toFuelFormInput);
 
     const vehicle = vehicles.find((item) => item.id === activeVehicleId);
     const entryLabel = getEnergyEntryLabel(vehicle);
@@ -74,6 +74,7 @@ export default function FuelScreen() {
             quantity: formInput.liters,
             price: formInput.price,
             odometer: formInput.odometer,
+            date: formInput.date,
         });
         if (!result.ok) {
             setError(result.error);
@@ -84,14 +85,15 @@ export default function FuelScreen() {
             if (editingEntry) {
                 await updateFuelEntry({
                     ...editingEntry,
+                    date: result.value.date,
                     liters: result.value.quantity,
                     price: result.value.price,
                     odometer: result.value.odometer,
                 });
             } else {
                 await createFuelEntry({
-                    vehicleId: activeVehicleId,
-                    date: new Date().toISOString(),
+                vehicleId: activeVehicleId,
+                date: result.value.date,
                     liters: result.value.quantity,
                     price: result.value.price,
                     odometer: result.value.odometer,
@@ -130,6 +132,14 @@ export default function FuelScreen() {
                     </Text>
                 </View>
             ) : null}
+
+            <TextInput
+                placeholder={ENTRY_DATE_PLACEHOLDER}
+                placeholderTextColor="#94a3b8"
+                style={styles.input}
+                value={formInput.date}
+                onChangeText={(value) => updateFormInput('date', value)}
+            />
 
             <TextInput
                 placeholder={isElectricVehicle(vehicle) ? 'kWh' : 'Liters'}
@@ -224,10 +234,15 @@ export default function FuelScreen() {
 
 function toFuelFormInput(entry: FuelEntry): FuelFormInput {
     return {
+        date: toCalendarDate(entry.date),
         liters: String(entry.liters),
         price: String(entry.price),
         odometer: String(entry.odometer),
     };
+}
+
+function createEmptyFuelForm(): FuelFormInput {
+    return { date: todayCalendarDate(), liters: '', price: '', odometer: '' };
 }
 
 const styles = StyleSheet.create({

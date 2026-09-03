@@ -1,8 +1,10 @@
 import { Vehicle } from '../models/Vehicle';
+import { parseCalendarDate } from './entryDate';
 
 const FIRST_AUTOMOBILE_YEAR = 1886;
 const YEAR_AFTER_CURRENT_YEAR = 1;
 const MINIMUM_ENERGY_QUANTITY = 0.000001;
+const INVALID_ENTRY_DATE_MESSAGE = 'Date must use YYYY-MM-DD.';
 
 type ValidationSuccess<T> = { ok: true; value: T };
 type ValidationFailure = { ok: false; error: string };
@@ -102,7 +104,8 @@ export function validateEnergyEntryForm(input: {
     quantity: string;
     price: string;
     odometer: string;
-}): ValidationResult<{ quantity: number; price: number; odometer: number }> {
+    date: string;
+}): ValidationResult<{ quantity: number; price: number; odometer: number; date: string }> {
     const quantity = decimal(input.quantity, 'Energy quantity', MINIMUM_ENERGY_QUANTITY);
     if (!quantity.ok) return quantity;
 
@@ -112,14 +115,18 @@ export function validateEnergyEntryForm(input: {
     const odometer = wholeNumber(input.odometer, 'Odometer', 0);
     if (!odometer.ok) return odometer;
 
-    return { ok: true, value: { quantity: quantity.value, price: price.value, odometer: odometer.value } };
+    const date = validEntryDate(input.date);
+    if (!date.ok) return date;
+
+    return { ok: true, value: { quantity: quantity.value, price: price.value, odometer: odometer.value, date: date.value } };
 }
 
 export function validateMaintenanceEntryForm(input: {
     type: string;
     cost: string;
     odometer: string;
-}): ValidationResult<{ type: string; cost: number; odometer: number }> {
+    date: string;
+}): ValidationResult<{ type: string; cost: number; odometer: number; date: string }> {
     const type = requiredText(input.type, 'Maintenance type');
     if (!type.ok) return type;
 
@@ -129,7 +136,15 @@ export function validateMaintenanceEntryForm(input: {
     const odometer = wholeNumber(input.odometer, 'Odometer', 0);
     if (!odometer.ok) return odometer;
 
-    return { ok: true, value: { type: type.value, cost: cost.value, odometer: odometer.value } };
+    const date = validEntryDate(input.date);
+    if (!date.ok) return date;
+
+    return { ok: true, value: { type: type.value, cost: cost.value, odometer: odometer.value, date: date.value } };
+}
+
+function validEntryDate(value: string): ValidationResult<string> {
+    const date = parseCalendarDate(value);
+    return date ? { ok: true, value: date } : { ok: false, error: INVALID_ENTRY_DATE_MESSAGE };
 }
 
 function optionalText(value: string): string | undefined {

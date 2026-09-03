@@ -9,10 +9,10 @@ export function useEntryEditor<
     Entry extends EditableEntry,
     FormInput extends { [Field in keyof FormInput]: string },
 >(
-    emptyForm: FormInput,
+    createEmptyForm: () => FormInput,
     toFormInput: (entry: Entry) => FormInput,
 ) {
-    const [formInput, setFormInput] = useState(emptyForm);
+    const [formInput, setFormInput] = useState(createEmptyForm);
     const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
 
     const updateFormInput = useCallback(<Field extends keyof FormInput>(field: Field, value: FormInput[Field]) => {
@@ -20,9 +20,9 @@ export function useEntryEditor<
     }, []);
 
     const clearEditor = useCallback(() => {
-        setFormInput(emptyForm);
+        setFormInput(createEmptyForm());
         setEditingEntry(null);
-    }, [emptyForm]);
+    }, [createEmptyForm]);
 
     const startEditing = useCallback(
         (entry: Entry) => {

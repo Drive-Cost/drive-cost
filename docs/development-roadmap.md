@@ -28,6 +28,8 @@ Status: in progress.
 
 - [x] Add delete flows for fuel and maintenance entries.
 - [x] Add edit flows for fuel and maintenance entries.
+- [x] Let fuel and maintenance entries record and edit their calendar date.
+- [x] Show a complete, chronologically ordered vehicle history.
 - [x] Show clear local-only, syncing, synced, and recoverable sync states.
 - Show useful empty states and recoverable form errors.
 - Split fuel and electric charging into clear domain concepts while preserving a

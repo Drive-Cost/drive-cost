@@ -10,15 +10,15 @@ import { EditEntryButton } from '../components/entry/EditEntryButton';
 import { MaintenanceEntry } from '../models/MaintenanceEntry';
 import { useEntryEditor } from '../components/entry/useEntryEditor';
 import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../components/entry/entryError';
+import { ENTRY_DATE_PLACEHOLDER, toCalendarDate, todayCalendarDate } from '../domain/entryDate';
 
 interface MaintenanceFormInput {
+    date: string;
     type: string;
     description: string;
     cost: string;
     odometer: string;
 }
-
-const EMPTY_MAINTENANCE_FORM: MaintenanceFormInput = { type: '', description: '', cost: '', odometer: '' };
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -43,7 +43,7 @@ export default function MaintenanceScreen() {
         startEditing,
         cancelIfVehicleChanged,
         clearIfEditing,
-    } = useEntryEditor(EMPTY_MAINTENANCE_FORM, toMaintenanceFormInput);
+    } = useEntryEditor(createEmptyMaintenanceForm, toMaintenanceFormInput);
 
     const vehicle = vehicles.find((item) => item.id === activeVehicleId);
     const mileageSnapshot = useMemo(() => {
@@ -71,6 +71,7 @@ export default function MaintenanceScreen() {
             type: formInput.type,
             cost: formInput.cost,
             odometer: formInput.odometer,
+            date: formInput.date,
         });
         if (!result.ok) {
             setError(result.error);
@@ -81,6 +82,7 @@ export default function MaintenanceScreen() {
             if (editingEntry) {
                 await updateMaintenanceEntry({
                     ...editingEntry,
+                    date: result.value.date,
                     type: result.value.type,
                     description: formInput.description,
                     cost: result.value.cost,
@@ -91,8 +93,8 @@ export default function MaintenanceScreen() {
                     vehicleId: activeVehicleId,
                     type: result.value.type,
                     description: formInput.description,
-                    cost: result.value.cost,
-                    date: new Date().toISOString(),
+                cost: result.value.cost,
+                date: result.value.date,
                     odometer: result.value.odometer,
                 });
             }
@@ -133,6 +135,14 @@ export default function MaintenanceScreen() {
                     </Text>
                 </View>
             ) : null}
+
+            <TextInput
+                placeholder={ENTRY_DATE_PLACEHOLDER}
+                placeholderTextColor="#94a3b8"
+                style={styles.input}
+                value={formInput.date}
+                onChangeText={(value) => updateFormInput('date', value)}
+            />
 
             <TextInput
                 placeholder="Type"
@@ -233,11 +243,16 @@ export default function MaintenanceScreen() {
 
 function toMaintenanceFormInput(entry: MaintenanceEntry): MaintenanceFormInput {
     return {
+        date: toCalendarDate(entry.date),
         type: entry.type,
         description: entry.description,
         cost: String(entry.cost),
         odometer: String(entry.odometer),
     };
+}
+
+function createEmptyMaintenanceForm(): MaintenanceFormInput {
+    return { date: todayCalendarDate(), type: '', description: '', cost: '', odometer: '' };
 }
 
 const styles = StyleSheet.create({

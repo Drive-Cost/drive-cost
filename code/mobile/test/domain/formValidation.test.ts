@@ -59,16 +59,23 @@ describe('vehicle form validation', () => {
 
 describe('entry form validation', () => {
     it('allows a zero-cost charging entry', () => {
-        expect(validateEnergyEntryForm({ quantity: '42.5', price: '0', odometer: '18010' })).toEqual({
+        expect(validateEnergyEntryForm({ quantity: '42.5', price: '0', odometer: '18010', date: '2026-09-03' })).toEqual({
             ok: true,
-            value: { quantity: 42.5, price: 0, odometer: 18010 },
+            value: { quantity: 42.5, price: 0, odometer: 18010, date: '2026-09-03T00:00:00.000Z' },
         });
     });
 
     it('rejects missing maintenance type and negative cost', () => {
-        expect(validateMaintenanceEntryForm({ type: '', cost: '-25', odometer: '18010' })).toEqual({
+        expect(validateMaintenanceEntryForm({ type: '', cost: '-25', odometer: '18010', date: '2026-09-03' })).toEqual({
             ok: false,
             error: 'Maintenance type is required.',
+        });
+    });
+
+    it('rejects an impossible calendar date', () => {
+        expect(validateMaintenanceEntryForm({ type: 'Oil service', cost: '95', odometer: '18010', date: '2026-02-30' })).toEqual({
+            ok: false,
+            error: 'Date must use YYYY-MM-DD.',
         });
     });
 });

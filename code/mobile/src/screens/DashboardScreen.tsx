@@ -14,9 +14,10 @@ import {
     formatCostPerKm,
     formatCurrency,
 } from '../services/vehicle/costCalculator';
-import { getEnergyCostLabel, getEnergyEventTitle, isElectricVehicle } from '../services/vehicle/vehicleProfile';
+import { getEnergyCostLabel } from '../services/vehicle/vehicleProfile';
 import { buildVehicleInsights } from '../services/vehicle/vehicleInsights';
 import { createMileageSnapshot } from '../services/vehicle/vehicleUsage';
+import { buildVehicleHistory } from '../services/vehicle/vehicleHistory';
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -53,26 +54,7 @@ export default function DashboardScreen() {
     const totalCost = totalFuelCost + totalMaintenanceCost;
     const mileageSnapshot = createMileageSnapshot(vehicle, fuelEntries, maintenanceEntries);
     const costPerKm = calculateCostPerKm(totalCost, mileageSnapshot.trackedDistance);
-    const recentEvents = [
-        ...fuelEntries.map((entry) => ({
-            id: `fuel-${entry.id ?? entry.date}`,
-            title: getEnergyEventTitle(vehicle),
-            amount: formatCurrency(entry.price),
-            meta: `${entry.liters.toFixed(1)} ${
-                isElectricVehicle(vehicle) ? 'kWh' : 'L'
-            } • ${entry.odometer.toLocaleString()} km`,
-            date: entry.date,
-        })),
-        ...maintenanceEntries.map((entry) => ({
-            id: `maintenance-${entry.id ?? entry.date}`,
-            title: entry.type || 'Maintenance',
-            amount: formatCurrency(entry.cost),
-            meta: `${entry.description || 'Service entry'} • ${entry.odometer.toLocaleString()} km`,
-            date: entry.date,
-        })),
-    ]
-        .sort((left, right) => right.date.localeCompare(left.date))
-        .slice(0, 4);
+    const vehicleHistory = buildVehicleHistory(vehicle, fuelEntries, maintenanceEntries);
     const insights = buildVehicleInsights(
         vehicle,
         fuelEntries,
@@ -159,21 +141,21 @@ export default function DashboardScreen() {
 
             <View style={styles.timelineCard}>
                 <View style={styles.timelineHeader}>
-                    <Text style={styles.timelineTitle}>Recent events</Text>
-                    <Text style={styles.timelineSubtitle}>Fuel and maintenance, newest first</Text>
+                    <Text style={styles.timelineTitle}>Vehicle history</Text>
+                    <Text style={styles.timelineSubtitle}>Every fuel and maintenance entry, newest first</Text>
                 </View>
 
-                {recentEvents.length === 0 ? (
+                {vehicleHistory.length === 0 ? (
                     <Text style={styles.emptyTimeline}>Your timeline will appear here after the first entries.</Text>
                 ) : (
-                    recentEvents.map((event) => (
+                    vehicleHistory.map((event) => (
                         <View key={event.id} style={styles.timelineItem}>
                             <View style={styles.timelineCopy}>
                                 <Text style={styles.timelineItemTitle}>{event.title}</Text>
-                                <Text style={styles.timelineItemMeta}>{event.meta}</Text>
+                                <Text style={styles.timelineItemMeta}>{event.detail}</Text>
                                 <Text style={styles.timelineItemDate}>{formatDate(event.date)}</Text>
                             </View>
-                            <Text style={styles.timelineAmount}>{event.amount}</Text>
+                            <Text style={styles.timelineAmount}>{formatCurrency(event.amount)}</Text>
                         </View>
                     ))
                 )}
