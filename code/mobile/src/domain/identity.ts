@@ -3,6 +3,7 @@ import { SyncEntity, SyncEntityType } from './sync';
 const CLIENT_ID_PREFIX_BY_ENTITY: Record<SyncEntityType, string> = {
     [SyncEntity.Vehicle]: 'vehicle',
     [SyncEntity.FuelEntry]: 'fuel',
+    [SyncEntity.ChargingEntry]: 'charging',
     [SyncEntity.MaintenanceEntry]: 'maintenance',
 };
 

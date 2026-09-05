@@ -13,6 +13,7 @@ export {
 export type {
     DeleteSyncPayload,
     FuelEntrySyncPayload,
+    ChargingEntrySyncPayload,
     MaintenanceEntrySyncPayload,
     PullResponse,
     ProblemDetails,

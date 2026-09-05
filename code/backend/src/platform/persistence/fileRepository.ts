@@ -5,16 +5,18 @@ import { DriveCostRepository, SyncEntityType } from './repository';
 
 const collectionByEntityType: Record<
     SyncEntityType,
-    keyof Pick<DatabaseShape, 'vehicles' | 'fuelEntries' | 'maintenanceEntries'>
+    keyof Pick<DatabaseShape, 'vehicles' | 'fuelEntries' | 'chargingEntries' | 'maintenanceEntries'>
 > = {
     [SyncEntity.Vehicle]: 'vehicles',
     [SyncEntity.FuelEntry]: 'fuelEntries',
+    [SyncEntity.ChargingEntry]: 'chargingEntries',
     [SyncEntity.MaintenanceEntry]: 'maintenanceEntries',
 };
 
 const idPrefixByEntityType: Record<SyncEntityType, string> = {
     [SyncEntity.Vehicle]: 'vehicle',
     [SyncEntity.FuelEntry]: 'fuel',
+    [SyncEntity.ChargingEntry]: 'charging',
     [SyncEntity.MaintenanceEntry]: 'maintenance',
 };
 

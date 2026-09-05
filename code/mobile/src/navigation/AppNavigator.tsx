@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import DashboardScreen from '../screens/DashboardScreen';
 import GarageStack from './GarageStack';
 import FuelScreen from '../screens/FuelScreen';
+import ChargingScreen from '../screens/ChargingScreen';
 import MaintenanceScreen from '../screens/MaintenanceScreen';
 import { AppTabParamList } from './types';
 
@@ -12,6 +13,7 @@ const TAB_ICONS: Record<keyof AppTabParamList, { active: string; inactive: strin
     Dashboard: { active: '▦', inactive: '◫' },
     Garage: { active: '⌂', inactive: '⌂' },
     Fuel: { active: '⛽', inactive: '⛽' },
+    Charging: { active: '⚡', inactive: '⚡' },
     Maintenance: { active: '⚙', inactive: '⚙' },
 };
 
@@ -45,6 +47,7 @@ export default function AppNavigator() {
             <Tab.Screen name="Garage" component={GarageStack} options={{ headerShown: false }} />
 
             <Tab.Screen name="Fuel" component={FuelScreen} />
+            <Tab.Screen name="Charging" component={ChargingScreen} />
 
             <Tab.Screen name="Maintenance" component={MaintenanceScreen} />
         </Tab.Navigator>

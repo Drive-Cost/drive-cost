@@ -1,4 +1,11 @@
-import { FuelEntrySyncPayload, MaintenanceEntrySyncPayload, SyncEntity, VehicleSyncPayload } from '../../domain/sync';
+import {
+    ChargingEntrySyncPayload,
+    FuelEntrySyncPayload,
+    MaintenanceEntrySyncPayload,
+    SyncEntity,
+    VehicleSyncPayload,
+} from '../../domain/sync';
+import { ChargingEntry } from '../../models/ChargingEntry';
 import { FuelEntry } from '../../models/FuelEntry';
 import { MaintenanceEntry } from '../../models/MaintenanceEntry';
 import { Vehicle } from '../../models/Vehicle';
@@ -31,6 +38,17 @@ export function toFuelEntrySyncPayload(entry: FuelEntry, vehicleClientId: string
     };
 }
 
+export function toChargingEntrySyncPayload(entry: ChargingEntry, vehicleClientId: string): ChargingEntrySyncPayload {
+    return {
+        clientId: requiredClientId(entry.clientId, SyncEntity.ChargingEntry),
+        vehicleClientId,
+        date: entry.date,
+        kWh: entry.kWh,
+        price: entry.price,
+        odometer: entry.odometer,
+    };
+}
+
 export function toMaintenanceEntrySyncPayload(
     entry: MaintenanceEntry,
     vehicleClientId: string,
@@ -46,9 +64,11 @@ export function toMaintenanceEntrySyncPayload(
     };
 }
 
+
 const ENTITY_DISPLAY_NAME: Record<(typeof SyncEntity)[keyof typeof SyncEntity], string> = {
     [SyncEntity.Vehicle]: 'vehicle',
     [SyncEntity.FuelEntry]: 'fuel entry',
+    [SyncEntity.ChargingEntry]: 'charging entry',
     [SyncEntity.MaintenanceEntry]: 'maintenance entry',
 };
 

@@ -1,4 +1,5 @@
 export type {
+    ChargingEntrySyncPayload as ChargingEntrySyncInput,
     FuelEntrySyncPayload as FuelEntrySyncInput,
     MaintenanceEntrySyncPayload as MaintenanceEntrySyncInput,
 } from '@drivecost/contracts';
@@ -17,6 +18,17 @@ export const fuelEntrySyncSchema = {
     properties: {
         ...entryBaseProperties,
         liters: { type: 'number', exclusiveMinimum: 0 },
+        price: { type: 'number', minimum: 0 },
+    },
+} as const;
+
+export const chargingEntrySyncSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['clientId', 'vehicleClientId', 'date', 'kWh', 'price', 'odometer'],
+    properties: {
+        ...entryBaseProperties,
+        kWh: { type: 'number', exclusiveMinimum: 0 },
         price: { type: 'number', minimum: 0 },
     },
 } as const;

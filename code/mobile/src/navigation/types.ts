@@ -10,5 +10,6 @@ export type AppTabParamList = {
     Dashboard: undefined;
     Garage: NavigatorScreenParams<GarageStackParamList> | undefined;
     Fuel: undefined;
+    Charging: undefined;
     Maintenance: undefined;
 };

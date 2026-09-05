@@ -11,6 +11,7 @@ const defaultDatabase = (): DatabaseShape => ({
     syncChanges: [],
     vehicles: [],
     fuelEntries: [],
+    chargingEntries: [],
     maintenanceEntries: [],
 });
 

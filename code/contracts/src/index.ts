@@ -1,6 +1,7 @@
 export const SyncEntity = {
     Vehicle: 'vehicle',
     FuelEntry: 'fuel_entry',
+    ChargingEntry: 'charging_entry',
     MaintenanceEntry: 'maintenance_entry',
 } as const;
 
@@ -14,6 +15,7 @@ export const SyncRoute = {
     GuestSession: '/auth/guest',
     Vehicles: '/vehicles',
     FuelEntries: '/fuel-entries',
+    ChargingEntries: '/charging-entries',
     MaintenanceEntries: '/maintenance-entries',
     Changes: '/sync',
 } as const;
@@ -21,6 +23,7 @@ export const SyncRoute = {
 export const SyncRouteByEntity = {
     [SyncEntity.Vehicle]: SyncRoute.Vehicles,
     [SyncEntity.FuelEntry]: SyncRoute.FuelEntries,
+    [SyncEntity.ChargingEntry]: SyncRoute.ChargingEntries,
     [SyncEntity.MaintenanceEntry]: SyncRoute.MaintenanceEntries,
 } as const;
 
@@ -51,6 +54,11 @@ export interface FuelEntrySyncPayload extends EntrySyncPayload {
     price: number;
 }
 
+export interface ChargingEntrySyncPayload extends EntrySyncPayload {
+    kWh: number;
+    price: number;
+}
+
 export interface MaintenanceEntrySyncPayload extends EntrySyncPayload {
     type: string;
     description: string;
@@ -60,6 +68,7 @@ export interface MaintenanceEntrySyncPayload extends EntrySyncPayload {
 export interface SyncPayloadByEntity {
     [SyncEntity.Vehicle]: VehicleSyncPayload;
     [SyncEntity.FuelEntry]: FuelEntrySyncPayload;
+    [SyncEntity.ChargingEntry]: ChargingEntrySyncPayload;
     [SyncEntity.MaintenanceEntry]: MaintenanceEntrySyncPayload;
 }
 
@@ -72,6 +81,7 @@ export interface DeleteSyncPayload {
 export interface SyncOperationByEntity {
     [SyncEntity.Vehicle]: typeof SyncOperation.Upsert;
     [SyncEntity.FuelEntry]: SyncOperation;
+    [SyncEntity.ChargingEntry]: SyncOperation;
     [SyncEntity.MaintenanceEntry]: SyncOperation;
 }
 
@@ -188,6 +198,7 @@ const syncPayloadDecoderByEntity: {
 } = {
     [SyncEntity.Vehicle]: decodeVehicle,
     [SyncEntity.FuelEntry]: decodeFuelEntry,
+    [SyncEntity.ChargingEntry]: decodeChargingEntry,
     [SyncEntity.MaintenanceEntry]: decodeMaintenanceEntry,
 };
 
@@ -231,6 +242,15 @@ function decodeFuelEntry(value: unknown): FuelEntrySyncPayload {
     return {
         ...decodeEntryBase(payload),
         liters: requiredNumber(payload, 'liters'),
+        price: requiredNumber(payload, 'price'),
+    };
+}
+
+function decodeChargingEntry(value: unknown): ChargingEntrySyncPayload {
+    const payload = requiredRecord(value);
+    return {
+        ...decodeEntryBase(payload),
+        kWh: requiredNumber(payload, 'kWh'),
         price: requiredNumber(payload, 'price'),
     };
 }

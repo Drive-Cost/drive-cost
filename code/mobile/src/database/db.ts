@@ -100,6 +100,30 @@ export const initDatabase = () => {
   `);
 
     db.execSync(`
+    CREATE TABLE IF NOT EXISTS charging_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      clientId TEXT,
+      vehicleId INTEGER,
+      date TEXT,
+      kWh REAL,
+      price REAL,
+      odometer INTEGER
+    );
+  `);
+
+    db.execSync(`
+    CREATE TABLE IF NOT EXISTS ownership_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      clientId TEXT,
+      vehicleId INTEGER,
+      category TEXT,
+      description TEXT,
+      amount REAL,
+      date TEXT
+    );
+  `);
+
+    db.execSync(`
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       entityType TEXT,
@@ -136,16 +160,22 @@ export const initDatabase = () => {
     db.execSync(`UPDATE vehicles SET clientId = 'legacy-vehicle-' || id WHERE clientId IS NULL;`);
     db.execSync(`UPDATE fuel_entries SET clientId = 'legacy-fuel-' || id WHERE clientId IS NULL;`);
     db.execSync(`UPDATE maintenance_entries SET clientId = 'legacy-maintenance-' || id WHERE clientId IS NULL;`);
+    db.execSync(`UPDATE charging_entries SET clientId = 'legacy-charging-' || id WHERE clientId IS NULL;`);
+    db.execSync(`UPDATE ownership_expenses SET clientId = 'legacy-expense-' || id WHERE clientId IS NULL;`);
 
     db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicles_client_id ON vehicles(clientId);`);
     db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_fuel_entries_client_id ON fuel_entries(clientId);`);
     db.execSync(
         `CREATE UNIQUE INDEX IF NOT EXISTS idx_maintenance_entries_client_id ON maintenance_entries(clientId);`,
     );
+    db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_charging_entries_client_id ON charging_entries(clientId);`);
+    db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ownership_expenses_client_id ON ownership_expenses(clientId);`);
     db.execSync(`CREATE INDEX IF NOT EXISTS idx_fuel_entries_vehicle_date ON fuel_entries(vehicleId, date DESC);`);
     db.execSync(
         `CREATE INDEX IF NOT EXISTS idx_maintenance_entries_vehicle_date ON maintenance_entries(vehicleId, date DESC);`,
     );
+    db.execSync(`CREATE INDEX IF NOT EXISTS idx_charging_entries_vehicle_date ON charging_entries(vehicleId, date DESC);`);
+    db.execSync(`CREATE INDEX IF NOT EXISTS idx_ownership_expenses_vehicle_date ON ownership_expenses(vehicleId, date DESC);`);
     db.execSync(`CREATE INDEX IF NOT EXISTS idx_sync_queue_due ON sync_queue(nextAttemptAt, createdAt, id);`);
 };
 

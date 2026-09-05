@@ -2,6 +2,7 @@ import { db } from '../../../database/db';
 import { getPullCursor, setPullCursor } from '../../../database/syncStateRepository';
 import { upsertVehicleFromSync } from '../../../database/vehicleRepository';
 import { deleteFuelEntryFromSync, upsertFuelEntryFromSync } from '../../../database/fuelRepository';
+import { deleteChargingEntryFromSync, upsertChargingEntryFromSync } from '../../../database/chargingRepository';
 import { deleteMaintenanceEntryFromSync, upsertMaintenanceEntryFromSync } from '../../../database/maintenanceRepository';
 import { RemoteChange, SyncEntity, SyncOperation } from '../../../domain/sync';
 import { apiClient } from '../apiClient';
@@ -29,6 +30,8 @@ async function applyChange(change: RemoteChange, transaction: typeof db): Promis
             return upsertVehicleFromSync(change.payload, transaction);
         case SyncEntity.FuelEntry:
             return upsertFuelEntryFromSync(change.payload, transaction);
+        case SyncEntity.ChargingEntry:
+            return upsertChargingEntryFromSync(change.payload, transaction);
         case SyncEntity.MaintenanceEntry:
             return upsertMaintenanceEntryFromSync(change.payload, transaction);
     }
@@ -41,6 +44,8 @@ async function applyDeleteChange(
     switch (change.entityType) {
         case SyncEntity.FuelEntry:
             return deleteFuelEntryFromSync(change.payload.clientId, transaction);
+        case SyncEntity.ChargingEntry:
+            return deleteChargingEntryFromSync(change.payload.clientId, transaction);
         case SyncEntity.MaintenanceEntry:
             return deleteMaintenanceEntryFromSync(change.payload.clientId, transaction);
     }

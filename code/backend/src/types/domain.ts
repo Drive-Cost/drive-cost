@@ -26,6 +26,7 @@ export interface SyncedRecord {
 
 export type SyncedVehicleRecord = SyncedRecord;
 export type SyncedFuelEntryRecord = SyncedRecord;
+export type SyncedChargingEntryRecord = SyncedRecord;
 export type SyncedMaintenanceEntryRecord = SyncedRecord;
 
 export interface DatabaseShape {
@@ -33,6 +34,7 @@ export interface DatabaseShape {
     syncChanges: SyncChange[];
     vehicles: SyncedVehicleRecord[];
     fuelEntries: SyncedFuelEntryRecord[];
+    chargingEntries: SyncedChargingEntryRecord[];
     maintenanceEntries: SyncedMaintenanceEntryRecord[];
 }
 

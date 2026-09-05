@@ -147,6 +147,8 @@ function createDependencies(
                 return;
             }
 
+            if (change.entityType !== SyncEntity.MaintenanceEntry) return;
+
             const vehicle = replica.vehicles.get(change.payload.vehicleClientId);
             if (!vehicle) throw new Error('Cannot apply maintenance before its vehicle is synced.');
             replica.maintenanceEntries.set(change.payload.clientId, {
