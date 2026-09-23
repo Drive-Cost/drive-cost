@@ -1,6 +1,7 @@
 # DriveCost
 
-DriveCost is a local-first mobile app for understanding the true cost of car ownership.
+DriveCost is a local-first mobile app for understanding the recorded costs of
+vehicle ownership.
 
 The current app lives in [`code/mobile`](/Users/goncalofrutuoso/Developer/drivecost/code/mobile) and focuses on a practical MVP:
 
@@ -103,65 +104,7 @@ Current backend endpoints:
 - `DELETE /maintenance-entries/:clientId`
 - `GET /sync?after=:cursor`
 
-## Product Direction
-
-DriveCost remains **local-first** while the MVP is validated. The backend
-module is an early development scaffold, not a production sync service yet.
-
-The local product loop is still the first validation target:
-
-- whether users actually keep logging entries
-- whether the dashboard is useful enough to create habit
-- whether the mileage and vehicle model feel trustworthy
-
-A backend becomes valuable when you want:
-
-- cloud sync across devices
-- user accounts
-- shared or family vehicles
-- backup and restore
-- subscription billing
-- richer domain data ingestion
-
-The repository includes a backend scaffold under
-[`code/backend`](/Users/goncalofrutuoso/Developer/drivecost/code/backend) so
-you can grow into that architecture without mixing backend planning into the
-mobile app.
-
-The current mobile implementation stays offline-first:
-
-- data is always written to local SQLite first
-- sync jobs are queued locally
-- the app attempts replay when it starts and after new writes
-- backend unavailability should not block core usage
-
-## Engineering Baseline
-
-Before product expansion, the next work focuses on correctness and operability:
-
-- durable client-owned IDs for idempotent sync
-- schema migrations and indexed local queries
-- input validation and domain rules at the app boundary
-- automated tests and continuous integration
-- authenticated, user-scoped backend sync using a production database
-
-The sequence, architectural decisions, and explicit non-goals are documented in
-[`docs/development-roadmap.md`](/Users/goncalofrutuoso/Developer/drivecost/docs/development-roadmap.md)
-and [`docs/architecture-decisions.md`](/Users/goncalofrutuoso/Developer/drivecost/docs/architecture-decisions.md).
-
-## Recommended Next Steps
-
-- tailor more calculations for EVs versus combustion vehicles
-- add validation around mileage edits and impossible odometer values
-- add vehicle detail/history screens
-- start implementing backend auth and sync when the local usage loop feels strong
-
 ## Docs
 
-Useful starting points:
-
-- [`docs/product-overview.md`](/Users/goncalofrutuoso/Developer/drivecost/docs/product-overview.md)
-- [`docs/app-architecture.md`](/Users/goncalofrutuoso/Developer/drivecost/docs/app-architecture.md)
-- [`docs/mvp-scope.md`](/Users/goncalofrutuoso/Developer/drivecost/docs/mvp-scope.md)
-- [`docs/development-roadmap.md`](/Users/goncalofrutuoso/Developer/drivecost/docs/development-roadmap.md)
-- [`docs/architecture-decisions.md`](/Users/goncalofrutuoso/Developer/drivecost/docs/architecture-decisions.md)
+Start with [`docs/README.md`](/Users/goncalofrutuoso/Developer/drivecost/docs/README.md)
+for the authoritative documentation map.

@@ -1,4 +1,4 @@
-export type SyncPhase = 'local-only' | 'offline' | 'syncing' | 'synced' | 'error';
+export type SyncPhase = 'local-only' | 'offline' | 'syncing' | 'synced' | 'error' | 'auth-required' | 'account-mismatch';
 
 export interface SyncStatus {
     phase: SyncPhase;

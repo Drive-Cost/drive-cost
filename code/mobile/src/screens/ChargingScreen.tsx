@@ -1,11 +1,17 @@
 import { useEffect, useReducer, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { DeleteEntryButton } from '../components/entry/DeleteEntryButton';
-import { ENTRY_DATE_PLACEHOLDER, todayCalendarDate } from '../domain/entryDate';
-import { validateEnergyEntryForm } from '../domain/formValidation';
+import { todayCalendarDate } from '../domain/entryDate';
+import { validateEnergyEntryForm, validateNewEntryOdometer } from '../domain/formValidation';
 import { useChargingStore } from '../store/chargingStore';
 import { useVehicleStore } from '../store/vehicleStore';
 import { isElectricVehicle } from '../services/vehicle/vehicleProfile';
+import { energyTransactionCostLabel } from '../services/vehicle/vehicleCopy';
+import { QuickAddField } from '../components/entry/QuickAddField';
+import { QuickAddVehicleContext } from '../components/entry/QuickAddVehicleContext';
+import { RootStackParamList } from '../navigation/types';
+import { completeQuickAdd } from '../navigation/completeQuickAdd';
 
 type ChargingForm = { date: string; kWh: string; price: string; odometer: string };
 type ChargingFormAction = { field: keyof ChargingForm; value: string } | { reset: true };
@@ -16,21 +22,32 @@ function chargingFormReducer(state: ChargingForm, action: ChargingFormAction): C
     return 'reset' in action ? EMPTY_FORM() : { ...state, [action.field]: action.value };
 }
 
-export default function ChargingScreen() {
+type ChargingScreenProps = NativeStackScreenProps<RootStackParamList, 'ChargingEntry'>;
+
+export default function ChargingScreen({ navigation }: ChargingScreenProps) {
     const { vehicles, activeVehicleId, syncVehicleOdometer } = useVehicleStore();
     const { chargingEntries, loadChargingEntries, createChargingEntry, deleteChargingEntry } = useChargingStore();
     const [form, dispatch] = useReducer(chargingFormReducer, undefined, EMPTY_FORM);
     const [error, setError] = useState<string | null>(null);
     const vehicle = vehicles.find((item) => item.id === activeVehicleId);
+    const activeChargingEntries = chargingEntries.filter((entry) => entry.vehicleId === activeVehicleId);
 
     useEffect(() => {
         if (activeVehicleId) void loadChargingEntries(activeVehicleId);
     }, [activeVehicleId, loadChargingEntries]);
 
+    useEffect(() => {
+        if (vehicle && !form.odometer) dispatch({ field: 'odometer', value: String(vehicle.currentOdometer) });
+    }, [form.odometer, vehicle]);
+
     const save = async () => {
         if (!activeVehicleId) return;
         const result = validateEnergyEntryForm({ quantity: form.kWh, price: form.price, odometer: form.odometer, date: form.date });
         if (!result.ok) return setError(result.error);
+        if (vehicle) {
+            const odometer = validateNewEntryOdometer(result.value.odometer, vehicle.currentOdometer);
+            if (!odometer.ok) return setError(odometer.error);
+        }
         try {
             await createChargingEntry({
                 vehicleId: activeVehicleId,
@@ -42,6 +59,7 @@ export default function ChargingScreen() {
             await syncVehicleOdometer(activeVehicleId, result.value.odometer);
             dispatch({ reset: true });
             setError(null);
+            completeQuickAdd(navigation);
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : 'Unable to save this charging session.');
         }
@@ -52,15 +70,16 @@ export default function ChargingScreen() {
     }
 
     return <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Charging</Text><Text style={styles.copy}>Record charging separately from fuel.</Text>
+        <Text style={styles.title}>Add charge</Text><Text style={styles.copy}>Record a charging session for your active vehicle.</Text>
+        <QuickAddVehicleContext vehicle={vehicle} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        {(['date', 'kWh', 'price', 'odometer'] as const).map((field) => <TextInput key={field} style={styles.input} value={form[field]}
-            placeholder={field === 'date' ? ENTRY_DATE_PLACEHOLDER : field === 'kWh' ? 'kWh' : field === 'price' ? 'Price' : 'Odometer'}
-            keyboardType={field === 'date' ? 'default' : field === 'odometer' ? 'number-pad' : 'decimal-pad'}
-            onChangeText={(value) => dispatch({ field, value })} />)}
-        <Pressable style={styles.button} onPress={save}><Text style={styles.buttonText}>Save charging session</Text></Pressable>
+        <QuickAddField label="Energy added (kWh)" value={form.kWh} keyboardType="decimal-pad" onChangeText={(value) => dispatch({ field: 'kWh', value })} />
+        <QuickAddField label={energyTransactionCostLabel} value={form.price} keyboardType="decimal-pad" onChangeText={(value) => dispatch({ field: 'price', value })} />
+        <QuickAddField label="Odometer" value={form.odometer} keyboardType="number-pad" onChangeText={(value) => dispatch({ field: 'odometer', value })} />
+        <QuickAddField label="Date" placeholder="YYYY-MM-DD" value={form.date} onChangeText={(value) => dispatch({ field: 'date', value })} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Save charge" style={styles.button} onPress={() => { void save(); }}><Text style={styles.buttonText}>Save charge</Text></Pressable>
         <Text style={styles.historyTitle}>Charging history</Text>
-        {chargingEntries.map((entry) => <View key={entry.id} style={styles.row}><View><Text>{entry.kWh.toFixed(1)} kWh · EUR {entry.price.toFixed(2)}</Text><Text>{entry.odometer.toLocaleString()} km</Text></View><DeleteEntryButton entryId={entry.id} vehicleId={activeVehicleId} onDelete={deleteChargingEntry} onError={setError} /></View>)}
+        {activeChargingEntries.map((entry) => <View key={entry.id} style={styles.row}><View><Text>{entry.kWh.toFixed(1)} kWh · EUR {entry.price.toFixed(2)}</Text><Text>{entry.odometer.toLocaleString()} km</Text></View><DeleteEntryButton entryId={entry.id} vehicleId={activeVehicleId} onDelete={deleteChargingEntry} onError={setError} /></View>)}
     </ScrollView>;
 }
 

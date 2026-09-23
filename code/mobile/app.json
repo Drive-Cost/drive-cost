@@ -1,14 +1,20 @@
 {
     "expo": {
-        "name": "mobile",
-        "slug": "mobile",
-        "version": "1.0.0",
+        "name": "DriveCost",
+        "slug": "drivecost",
+        "version": "0.1.0",
         "orientation": "portrait",
         "icon": "./assets/icon.png",
         "userInterfaceStyle": "light",
         "splash": { "image": "./assets/splash-icon.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
-        "ios": { "supportsTablet": true },
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.goncalofrutuoso.drivecost",
+            "buildNumber": "1"
+        },
         "android": {
+            "package": "com.goncalofrutuoso.drivecost",
+            "versionCode": 1,
             "adaptiveIcon": {
                 "backgroundColor": "#E6F4FE",
                 "foregroundImage": "./assets/android-icon-foreground.png",

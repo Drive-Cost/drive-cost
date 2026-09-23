@@ -4,6 +4,7 @@ import { AuthenticatedUser } from './domain';
 
 declare module '@fastify/jwt' {
     interface FastifyJWT {
+        payload: AuthenticatedUser;
         user: AuthenticatedUser;
     }
 }

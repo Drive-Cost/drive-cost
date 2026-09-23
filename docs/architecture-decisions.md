@@ -60,6 +60,12 @@ JSONB payload keeps the evolving local-first domain flexible. When a query path
 becomes hot or a domain rule needs database enforcement, its fields can be
 promoted into explicit columns in a later migration.
 
+The Postgres entity-type constraints must contain exactly the shared contract's
+current set: vehicle, fuel entry, charging entry, maintenance entry, ownership
+expense (`expense_entry`), and recurring expense. Forward-only migration
+`004_sync_entity_type_parity` and real-Postgres integration tests protect this
+parity from future drift.
+
 ## ADR-009: Postgres Is The Primary System Of Record
 
 DriveCost uses Postgres for account data and synchronized ownership records. It
@@ -78,8 +84,53 @@ cursor. Clients request changes after their last cursor and apply them in order.
 For the current single-owner vehicle model, the server uses last-write-wins for
 the same user, entity type, and client ID.
 
-Fuel and maintenance deletions are represented as tombstones in the shared
-change feed. A tombstone deletes the local row by client ID, is safe to replay,
-and rejects stale later upserts so an offline device cannot resurrect a deleted
-entry. Vehicle deletion remains intentionally unavailable until its cascade and
-conflict policy are explicit.
+Fuel, charging, maintenance, one-off ownership-expense, recurring-schedule,
+and vehicle deletions are represented as tombstones in the shared change feed.
+A tombstone deletes the local row by client ID, is safe to replay, and rejects
+stale later upserts so an offline device cannot resurrect a deleted record.
+
+A vehicle tombstone is authoritative for its owned entries. Local SQLite uses
+foreign-key cascades to remove fuel, charging, maintenance, one-off expense,
+and recurring-expense rows atomically with the vehicle. The backend emits the
+vehicle tombstone followed by tombstones for every active owned entry in the
+same transaction. A later entry upsert must verify that its parent vehicle is
+still active, so an offline device cannot restore child data after deletion.
+
+## ADR-011: Mobile Authentication Uses Short-Lived Access Tokens And Rotating Sessions
+
+DriveCost uses 15-minute HS256 access JWTs with a fixed issuer
+(`https://api.drivecost.app`) and audience (`drivecost-mobile`). They carry the
+user ID, account mode, and session ID required to authorize an API request;
+they do not carry credentials or database session state. The server verifies
+the algorithm, issuer, and audience without looking up a session for every
+normal authenticated request.
+
+Refresh sessions are server-side records. The mobile credential is an opaque
+`<session-id>.<random-secret>` value, while storage contains only a SHA-256
+hash of its high-entropy secret. Refresh rotates the secret atomically and
+renews a 30-day inactivity expiry. Sessions are independently revocable, so a
+user can sign in on multiple devices without revoking the others. Logout
+revokes only the presented refresh session; an access JWT may remain valid
+until its short expiry.
+
+Guest upgrade changes the same persisted user from guest to registered in one
+transaction, revokes the current guest session, and creates a registered
+session. Vehicle ownership and the change feed remain attached to the same
+user ID. A pre-upgrade access token can remain valid briefly, but it has no
+cross-user authority.
+
+## ADR-012: A Local Dataset Has One Explicit Cloud Owner
+
+The mobile SQLite dataset is either unbound or bound to one persisted cloud
+user ID and mode. This binding is non-secret SQLite metadata, separate from
+SecureStore credentials, so losing or clearing credentials never transfers or
+unbounds local business data. A matching authenticated session is required
+before either outbox push or pull sync; an unbound dataset remains fully local,
+and a different authenticated user produces an account-mismatch state rather
+than a merge or replacement.
+
+Pull cursors are stored under the bound owner ID because backend cursors are
+account-specific. Existing access-token-only installations are treated
+conservatively: when their token exposes an unambiguous legacy user identity,
+the app preserves that owner binding but requires reauthentication. It never
+creates a replacement guest or guesses ownership from business rows.

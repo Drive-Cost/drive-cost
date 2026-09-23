@@ -1,8 +1,9 @@
 import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 import { entryErrorMessage, ENTRY_DELETE_FAILURE_MESSAGE } from './entryError';
+import { colors } from '../../shared/ui/tokens';
 
 const DELETE_TITLE = 'Delete entry?';
-const DELETE_MESSAGE = 'This removes the entry from this vehicle and syncs the deletion to your devices.';
+const DELETE_MESSAGE = 'This removes the entry from this vehicle.';
 const CANCEL_BUTTON_LABEL = 'Cancel';
 const DELETE_BUTTON_LABEL = 'Delete';
 
@@ -39,5 +40,5 @@ export function DeleteEntryButton({ entryId, vehicleId, onDelete, onError }: Del
 }
 
 const styles = StyleSheet.create({
-    label: { color: '#b91c1c', fontWeight: '600' },
+    label: { color: colors.destructive, fontWeight: '700' },
 });

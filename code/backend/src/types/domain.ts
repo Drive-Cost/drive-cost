@@ -8,10 +8,20 @@ export interface UserRecord {
     createdAt: string;
 }
 
+export interface AuthSessionRecord {
+    id: string;
+    userId: string;
+    refreshTokenHash: string;
+    createdAt: string;
+    lastUsedAt: string;
+    expiresAt: string;
+    revokedAt?: string;
+}
+
 export interface AuthenticatedUser {
     sub: string;
     mode: UserRecord['mode'];
-    email?: string;
+    sid: string;
 }
 
 export interface SyncedRecord {
@@ -28,14 +38,19 @@ export type SyncedVehicleRecord = SyncedRecord;
 export type SyncedFuelEntryRecord = SyncedRecord;
 export type SyncedChargingEntryRecord = SyncedRecord;
 export type SyncedMaintenanceEntryRecord = SyncedRecord;
+export type SyncedExpenseEntryRecord = SyncedRecord;
+export type SyncedRecurringExpenseRecord = SyncedRecord;
 
 export interface DatabaseShape {
     users: UserRecord[];
+    authSessions: AuthSessionRecord[];
     syncChanges: SyncChange[];
     vehicles: SyncedVehicleRecord[];
     fuelEntries: SyncedFuelEntryRecord[];
     chargingEntries: SyncedChargingEntryRecord[];
     maintenanceEntries: SyncedMaintenanceEntryRecord[];
+    expenseEntries: SyncedExpenseEntryRecord[];
+    recurringExpenses: SyncedRecurringExpenseRecord[];
 }
 
 export interface SyncChange {

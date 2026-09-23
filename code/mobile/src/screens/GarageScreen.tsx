@@ -1,8 +1,11 @@
 import { useEffect } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useVehicleStore } from '../store/vehicleStore';
 import { GarageStackParamList } from '../navigation/types';
+import { getGarageVehiclePresentation } from '../services/vehicle/garageVehiclePresentation';
 
 type GarageScreenProps = NativeStackScreenProps<GarageStackParamList, 'GarageHome'>;
 
@@ -14,15 +17,23 @@ export default function GarageScreen({ navigation }: GarageScreenProps) {
     }, [loadVehicles]);
 
     return (
-        <View style={styles.screen}>
+        <SafeAreaView edges={['top']} style={styles.screen}>
             <View style={styles.header}>
                 <Text style={styles.title}>Your garage</Text>
-                <Text style={styles.subtitle}>Choose the car you want DriveCost to track.</Text>
+                <Text style={styles.subtitle}>Choose the vehicle you want to use in DriveCost.</Text>
             </View>
 
-            <Pressable style={styles.addButton} onPress={() => navigation.navigate('AddVehicle')}>
-                <Text style={styles.addButtonText}>Add vehicle</Text>
-            </Pressable>
+            {vehicles.length > 0 ? (
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Add a vehicle"
+                    style={styles.addButton}
+                    onPress={() => navigation.navigate('AddVehicle')}
+                >
+                    <Ionicons name="add" size={19} color="#ffffff" />
+                    <Text style={styles.addButtonText}>Add vehicle</Text>
+                </Pressable>
+            ) : null}
 
             <FlatList
                 data={vehicles}
@@ -33,89 +44,94 @@ export default function GarageScreen({ navigation }: GarageScreenProps) {
                     <View style={styles.emptyCard}>
                         <Text style={styles.emptyTitle}>No vehicles yet</Text>
                         <Text style={styles.emptyText}>
-                            Start with one car and keep everything local while we shape the first version.
+                            Add your first vehicle to start tracking.
                         </Text>
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Add a vehicle"
+                            style={styles.emptyAction}
+                            onPress={() => navigation.navigate('AddVehicle')}
+                        >
+                            <Text style={styles.emptyActionText}>Add a vehicle</Text>
+                        </Pressable>
                     </View>
                 }
                 renderItem={({ item }) => {
                     if (item.id === undefined) return null;
                     const vehicleId = item.id;
 
+                    const presentation = getGarageVehiclePresentation(item, activeVehicleId);
                     return (
-                        <View style={[styles.vehicleCard, vehicleId === activeVehicleId && styles.vehicleCardActive]}>
-                            <Pressable onPress={() => setActiveVehicle(vehicleId)}>
-                                <Text style={styles.vehicleName}>{item.label || `${item.brand} ${item.model}`}</Text>
-                                <Text style={styles.vehicleMeta}>
-                                    {item.brand} {item.model} • {item.year}
-                                </Text>
-                                {item.fuelType || item.engine || item.powerHp || item.transmission ? (
-                                    <Text style={styles.vehicleSpec}>
-                                        {[
-                                            item.fuelType,
-                                            item.engine,
-                                            item.powerHp ? `${item.powerHp} hp` : null,
-                                            item.transmission,
-                                        ]
-                                            .filter(Boolean)
-                                            .join(' • ')}
-                                    </Text>
-                                ) : null}
-                                <Text style={styles.vehicleMeta}>Odometer {item.currentOdometer.toLocaleString()} km</Text>
-                                <Text style={styles.vehicleMeta}>
-                                    Ownership start {item.ownershipStartMileage.toLocaleString()} km
-                                </Text>
-                                <Text style={styles.vehicleMeta}>
-                                    Tracking start {item.trackingStartMileage.toLocaleString()} km
-                                </Text>
-                                {vehicleId === activeVehicleId ? <Text style={styles.activeTag}>Active vehicle</Text> : null}
-                            </Pressable>
-
+                        <View style={[styles.vehicleCard, presentation.isActive && styles.vehicleCardActive]}>
+                            <Text style={styles.vehicleName}>{presentation.name}</Text>
+                            {presentation.context ? <Text style={styles.vehicleContext}>{presentation.context}</Text> : null}
+                            <Text style={styles.odometer}>{presentation.odometer}</Text>
                             <View style={styles.cardActions}>
-                                <Pressable style={styles.secondaryButton} onPress={() => setActiveVehicle(vehicleId)}>
-                                    <Text style={styles.secondaryButtonText}>Set active</Text>
-                                </Pressable>
-
+                                {presentation.isActive ? (
+                                    <Text accessibilityLabel={`${presentation.name} is the active vehicle`} style={styles.activeTag}>Active</Text>
+                                ) : (
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Set ${presentation.name} as active`}
+                                        hitSlop={6}
+                                        style={styles.actionButton}
+                                        onPress={() => setActiveVehicle(vehicleId)}
+                                    >
+                                        <Text style={styles.activateAction}>Set active</Text>
+                                    </Pressable>
+                                )}
                                 <Pressable
-                                    style={styles.secondaryButton}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Edit ${presentation.name}`}
+                                    hitSlop={6}
+                                    style={styles.actionButton}
                                     onPress={() => navigation.navigate('EditVehicle', { vehicleId })}
                                 >
-                                    <Text style={styles.secondaryButtonText}>Edit</Text>
+                                    <Text style={styles.editAction}>Edit</Text>
+                                    <Ionicons name="chevron-forward" size={16} color="#475569" />
                                 </Pressable>
                             </View>
                         </View>
                     );
                 }}
             />
-        </View>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
     screen: { flex: 1, padding: 20, backgroundColor: '#f8fafc' },
-    header: { marginBottom: 16 },
+    header: { marginBottom: 14 },
     title: { fontSize: 28, fontWeight: '700', color: '#0f172a' },
     subtitle: { marginTop: 6, fontSize: 15, color: '#475569' },
     addButton: {
-        paddingVertical: 14,
-        borderRadius: 16,
+        alignSelf: 'flex-start',
+        flexDirection: 'row',
         alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 13,
+        paddingVertical: 10,
+        borderRadius: 10,
         backgroundColor: '#0f172a',
-        marginBottom: 18,
+        marginBottom: 16,
     },
-    addButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
-    list: { paddingBottom: 20 },
+    addButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+    list: { paddingBottom: 40 },
     emptyList: { flexGrow: 1, justifyContent: 'center' },
     separator: { height: 12 },
-    emptyCard: { padding: 20, borderRadius: 20, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' },
+    emptyCard: { padding: 20, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' },
     emptyTitle: { fontSize: 20, fontWeight: '600', color: '#0f172a' },
     emptyText: { marginTop: 8, color: '#475569', lineHeight: 22 },
-    vehicleCard: { padding: 18, borderRadius: 18, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' },
-    vehicleCardActive: { borderColor: '#0ea5e9', backgroundColor: '#f0f9ff' },
-    vehicleName: { fontSize: 18, fontWeight: '600', color: '#0f172a' },
-    vehicleMeta: { marginTop: 6, color: '#475569' },
-    vehicleSpec: { marginTop: 8, color: '#334155', lineHeight: 20 },
-    activeTag: { marginTop: 10, color: '#0369a1', fontWeight: '600' },
-    cardActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
-    secondaryButton: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, backgroundColor: '#e2e8f0' },
-    secondaryButtonText: { color: '#0f172a', fontWeight: '600' },
+    emptyAction: { marginTop: 16, alignSelf: 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: '#0f172a' },
+    emptyActionText: { color: '#ffffff', fontWeight: '600' },
+    vehicleCard: { padding: 18, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' },
+    vehicleCardActive: { borderColor: '#cbd5e1' },
+    vehicleName: { fontSize: 18, fontWeight: '700', color: '#0f172a' },
+    vehicleContext: { marginTop: 5, color: '#64748b', fontSize: 15 },
+    odometer: { marginTop: 16, color: '#0f172a', fontSize: 22, fontWeight: '700' },
+    cardActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
+    activeTag: { color: '#0f172a', fontSize: 14, fontWeight: '700' },
+    actionButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 4, justifyContent: 'center' },
+    activateAction: { color: '#0f172a', fontWeight: '700' },
+    editAction: { color: '#475569', fontWeight: '700' },
 });

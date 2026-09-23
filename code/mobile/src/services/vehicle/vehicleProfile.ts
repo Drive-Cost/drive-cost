@@ -17,6 +17,10 @@ export function getEnergyCostLabel(vehicle?: Vehicle) {
     return isElectricVehicle(vehicle) ? 'Energy cost' : 'Fuel cost';
 }
 
+export function getEnergyCategoryLabel(vehicle?: Vehicle) {
+    return isElectricVehicle(vehicle) ? 'Charging' : 'Fuel';
+}
+
 export function getEnergyUnitLabel(vehicle?: Vehicle) {
     return isElectricVehicle(vehicle) ? 'kWh' : 'L';
 }

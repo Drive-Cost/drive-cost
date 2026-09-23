@@ -1,23 +1,30 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMaintenanceStore } from '../store/maintenanceStore';
 import { useVehicleStore } from '../store/vehicleStore';
 import { formatCurrency } from '../services/vehicle/costCalculator';
-import { createMileageSnapshot } from '../services/vehicle/vehicleUsage';
-import { validateMaintenanceEntryForm } from '../domain/formValidation';
+import { validateMaintenanceEntryForm, validateNewEntryOdometer } from '../domain/formValidation';
 import { DeleteEntryButton } from '../components/entry/DeleteEntryButton';
 import { EditEntryButton } from '../components/entry/EditEntryButton';
 import { MaintenanceEntry } from '../models/MaintenanceEntry';
 import { useEntryEditor } from '../components/entry/useEntryEditor';
 import type { EntryForm } from '../components/entry/useEntryEditor';
 import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../components/entry/entryError';
-import { ENTRY_DATE_PLACEHOLDER, toCalendarDate, todayCalendarDate } from '../domain/entryDate';
+import { toCalendarDate, todayCalendarDate } from '../domain/entryDate';
+import { maintenanceIntroCopy } from '../services/vehicle/vehicleCopy';
+import { QuickAddField } from '../components/entry/QuickAddField';
+import { QuickAddVehicleContext } from '../components/entry/QuickAddVehicleContext';
+import { RootStackParamList } from '../navigation/types';
+import { completeQuickAdd } from '../navigation/completeQuickAdd';
 
 function formatDate(value: string) {
     return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function MaintenanceScreen() {
+type MaintenanceScreenProps = NativeStackScreenProps<RootStackParamList, 'MaintenanceEntry'>;
+
+export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps) {
     const {
         maintenanceEntries,
         createMaintenanceEntry,
@@ -28,6 +35,7 @@ export default function MaintenanceScreen() {
     const { vehicles, activeVehicleId, syncVehicleOdometer } = useVehicleStore();
 
     const [error, setError] = useState<string | null>(null);
+    const [showOptionalDetails, setShowOptionalDetails] = useState(false);
     const {
         formInput,
         editingEntry,
@@ -39,11 +47,6 @@ export default function MaintenanceScreen() {
     } = useEntryEditor(createEmptyMaintenanceForm, toMaintenanceFormInput);
 
     const vehicle = vehicles.find((item) => item.id === activeVehicleId);
-    const mileageSnapshot = useMemo(() => {
-        if (!vehicle) return null;
-        return createMileageSnapshot(vehicle, [], maintenanceEntries);
-    }, [vehicle, maintenanceEntries]);
-
     useEffect(() => {
         if (!activeVehicleId) return;
         loadMaintenanceEntries(activeVehicleId);
@@ -52,6 +55,12 @@ export default function MaintenanceScreen() {
     useEffect(() => {
         cancelIfVehicleChanged(activeVehicleId);
     }, [activeVehicleId, cancelIfVehicleChanged]);
+
+    useEffect(() => {
+        if (vehicle && !editingEntry && !formInput.odometer) {
+            updateFormInput('odometer', String(vehicle.currentOdometer));
+        }
+    }, [editingEntry, formInput.odometer, updateFormInput, vehicle]);
 
     const handleDelete = async (entryId: number, vehicleId: number) => {
         await deleteMaintenanceEntry(entryId, vehicleId);
@@ -69,6 +78,13 @@ export default function MaintenanceScreen() {
         if (!result.ok) {
             setError(result.error);
             return;
+        }
+        if (!editingEntry && vehicle) {
+            const odometer = validateNewEntryOdometer(result.value.odometer, vehicle.currentOdometer);
+            if (!odometer.ok) {
+                setError(odometer.error);
+                return;
+            }
         }
 
         try {
@@ -95,6 +111,7 @@ export default function MaintenanceScreen() {
 
             clearEditor();
             setError(null);
+            if (!editingEntry) completeQuickAdd(navigation);
         } catch (error) {
             setError(entryErrorMessage(error, ENTRY_SAVE_FAILURE_MESSAGE));
         }
@@ -106,73 +123,57 @@ export default function MaintenanceScreen() {
 
     return (
         <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.title}>Maintenance</Text>
-            <Text style={styles.subtitle}>
-                Build your service history for repairs, oil changes, tires, and every other ownership cost.
-            </Text>
+            <Text style={styles.title}>{editingEntry ? 'Edit maintenance' : 'Add maintenance'}</Text>
+            <Text style={styles.subtitle}>{maintenanceIntroCopy}</Text>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            {mileageSnapshot ? (
-                <View style={styles.snapshotCard}>
-                    <Text style={styles.snapshotLabel}>Tracking baseline</Text>
-                    <Text style={styles.snapshotValue}>{mileageSnapshot.trackingStartMileage.toLocaleString()} km</Text>
-                    <Text style={styles.snapshotHint}>
-                        Ownership start: {mileageSnapshot.ownershipStartMileage.toLocaleString()} km
-                    </Text>
-                    <Text style={styles.snapshotHint}>
-                        Tracking start: {mileageSnapshot.trackingStartMileage.toLocaleString()} km
-                    </Text>
-                    <Text style={styles.snapshotHint}>
-                        Latest recorded mileage: {mileageSnapshot.latestRecordedMileage.toLocaleString()} km
-                    </Text>
-                </View>
-            ) : null}
+            {vehicle ? <QuickAddVehicleContext vehicle={vehicle} /> : null}
 
-            <TextInput
-                placeholder={ENTRY_DATE_PLACEHOLDER}
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
-                value={formInput.date}
-                onChangeText={(value) => updateFormInput('date', value)}
-            />
-
-            <TextInput
-                placeholder="Type"
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
+            <QuickAddField
+                label="What was done"
                 value={formInput.type}
                 onChangeText={(value) => updateFormInput('type', value)}
             />
 
-            <TextInput
-                placeholder="Description"
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
-                value={formInput.description}
-                onChangeText={(value) => updateFormInput('description', value)}
-            />
-
-            <TextInput
-                placeholder="Cost"
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
+            <QuickAddField
+                label="Total paid"
                 value={formInput.cost}
                 keyboardType="decimal-pad"
                 onChangeText={(value) => updateFormInput('cost', value)}
             />
 
-            <TextInput
-                placeholder="Odometer"
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
+            <QuickAddField
+                label="Odometer"
                 value={formInput.odometer}
                 keyboardType="number-pad"
                 onChangeText={(value) => updateFormInput('odometer', value)}
             />
 
+            <QuickAddField
+                label="Date"
+                placeholder="YYYY-MM-DD"
+                value={formInput.date}
+                onChangeText={(value) => updateFormInput('date', value)}
+            />
+
+            {editingEntry || showOptionalDetails ? (
+                <QuickAddField
+                    label="Description"
+                    optional
+                    value={formInput.description}
+                    onChangeText={(value) => updateFormInput('description', value)}
+                />
+            ) : (
+                <Pressable accessibilityRole="button" accessibilityLabel="Add optional maintenance details" style={styles.optionalButton} onPress={() => setShowOptionalDetails(true)}>
+                    <Text style={styles.optionalButtonText}>Add optional details</Text>
+                </Pressable>
+            )}
+
             <Pressable
                 style={[styles.button, !activeVehicleId && styles.buttonDisabled]}
+                accessibilityRole="button"
+                accessibilityLabel={editingEntry ? 'Save maintenance changes' : 'Save maintenance'}
                 disabled={!activeVehicleId}
                 onPress={handleSave}
             >
@@ -253,10 +254,6 @@ const styles = StyleSheet.create({
     content: { padding: 20, paddingBottom: 28 },
     title: { fontSize: 28, fontWeight: '700', color: '#0f172a' },
     subtitle: { marginTop: 8, marginBottom: 20, color: '#475569', lineHeight: 22 },
-    snapshotCard: { marginBottom: 16, padding: 18, borderRadius: 18, backgroundColor: '#fef3c7' },
-    snapshotLabel: { color: '#b45309', fontSize: 14, marginBottom: 8 },
-    snapshotValue: { color: '#92400e', fontSize: 24, fontWeight: '700' },
-    snapshotHint: { marginTop: 8, color: '#b45309' },
     input: {
         backgroundColor: '#ffffff',
         borderColor: '#dbe4ee',
@@ -274,6 +271,8 @@ const styles = StyleSheet.create({
     buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
     secondaryButton: { marginTop: 10, alignItems: 'center', paddingVertical: 12 },
     secondaryButtonText: { color: '#2563eb', fontWeight: '600' },
+    optionalButton: { alignSelf: 'flex-start', marginBottom: 12, paddingVertical: 8 },
+    optionalButtonText: { color: '#2563eb', fontWeight: '600' },
     helperText: { marginTop: 12, color: '#475569' },
     historyCard: {
         marginTop: 20,

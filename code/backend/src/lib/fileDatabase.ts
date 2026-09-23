@@ -8,11 +8,14 @@ const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 const defaultDatabase = (): DatabaseShape => ({
     users: [],
+    authSessions: [],
     syncChanges: [],
     vehicles: [],
     fuelEntries: [],
     chargingEntries: [],
     maintenanceEntries: [],
+    expenseEntries: [],
+    recurringExpenses: [],
 });
 
 export function ensureDatabase() {

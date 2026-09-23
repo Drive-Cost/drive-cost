@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
+import { colors } from '../../shared/ui/tokens';
 
 const EDIT_BUTTON_LABEL = 'Edit';
 
@@ -15,5 +16,5 @@ export function EditEntryButton({ onPress }: EditEntryButtonProps) {
 }
 
 const styles = StyleSheet.create({
-    label: { color: '#2563eb', fontWeight: '600' },
+    label: { color: colors.secondaryText, fontWeight: '700' },
 });

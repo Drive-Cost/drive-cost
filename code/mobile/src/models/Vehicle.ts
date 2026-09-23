@@ -11,6 +11,7 @@ export interface Vehicle {
     transmission?: string;
     ownershipStartMileage: number;
     trackingStartMileage: number;
+    trackingStartDate?: string | null;
     currentOdometer: number;
     currentMileage?: number;
 }

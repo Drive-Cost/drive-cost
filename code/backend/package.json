@@ -12,12 +12,15 @@
         "start": "node dist/server.js",
         "db:migrate": "tsx src/platform/postgres/migrate.ts",
         "typecheck": "npm --prefix ../contracts run build && tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
-        "test": "npm --prefix ../contracts run build && DRIVECOST_DATA_DIR=.test-data node --import tsx --test 'test/**/*.test.ts'",
-        "test:postgres": "npm --prefix ../contracts run build && npm run db:migrate && node --import tsx --test test/modules/auth/routes.postgres.test.ts"
+        "test": "npm --prefix ../contracts run build && DRIVECOST_DATA_DIR=.test-data node --import tsx --test --test-concurrency=1 'test/**/*.test.ts'",
+        "test:postgres": "npm --prefix ../contracts run build && npm run db:migrate && node --import tsx --test test/modules/auth/routes.postgres.test.ts",
+        "postgres:test:reset": "docker compose -f compose.test.yaml down --volumes --remove-orphans && docker compose -f compose.test.yaml up --detach --wait",
+        "test:postgres:local": "npm run postgres:test:reset && DATABASE_URL=postgres://drivecost_test:drivecost-test-password@localhost:55432/drivecost_test npm run test:postgres"
     },
     "dependencies": {
         "@drivecost/contracts": "file:../contracts",
         "@fastify/jwt": "^10.2.0",
+        "@fastify/rate-limit": "^10.3.0",
         "fastify": "^5.2.1",
         "postgres": "^3.4.9"
     },

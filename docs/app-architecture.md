@@ -11,11 +11,12 @@ The architecture prioritizes:
 - maintainability
 - offline-first design
 
-The app stores data locally using SQLite and synchronizes to cloud services in future versions.
+The app stores data locally using SQLite and can synchronize account data
+through an optional backend without making local use depend on the network.
 
-The repository contains a backend module under `code/backend/`. It will grow
-into the account, sync, subscription, and curated-domain-data boundary while
-the mobile database remains immediately usable offline.
+The repository contains a backend module under `code/backend/`. It is the
+account and sync boundary; future subscription and curated-domain-data work
+belongs there while the mobile database remains immediately usable offline.
 
 ---
 
@@ -195,7 +196,7 @@ Database
 
 UI update
 
-Future synchronized flow:
+Synchronized flow:
 
 User Action
 

@@ -41,6 +41,23 @@ export const enqueueSyncJob = async <EntityType extends SyncEntityType>(
     );
 };
 
+export const removePendingVehicleUpserts = async (
+    vehicleClientId: string,
+    database: SQLite.SQLiteDatabase = db,
+): Promise<void> => {
+    await database.runAsync(
+        `DELETE FROM sync_queue
+         WHERE operation = 'upsert'
+           AND (
+             (entityType = 'vehicle' AND json_extract(payload, '$.clientId') = ?)
+             OR (entityType IN ('fuel_entry', 'charging_entry', 'maintenance_entry', 'expense_entry', 'recurring_expense')
+                 AND json_extract(payload, '$.vehicleClientId') = ?)
+           )`,
+        vehicleClientId,
+        vehicleClientId,
+    );
+};
+
 export const getSyncJobs = async (): Promise<SyncJob[]> => {
     return db.getAllAsync<SyncJob>(
         `

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildVehicleHistory } from '../../../src/services/vehicle/vehicleHistory';
+import { FuelFillStatus } from '../../../src/models/FuelEntry';
+import { ExpenseCategory } from '../../../src/models/ExpenseEntry';
 
 const vehicle = {
     id: 1,
@@ -25,6 +27,7 @@ describe('buildVehicleHistory', () => {
                     liters: 40,
                     price: 70,
                     odometer: 11_000,
+                    fillStatus: FuelFillStatus.Unknown,
                 },
                 {
                     id: 2,
@@ -34,6 +37,7 @@ describe('buildVehicleHistory', () => {
                     liters: 38,
                     price: 68,
                     odometer: 10_000,
+                    fillStatus: FuelFillStatus.Unknown,
                 },
             ],
             [
@@ -53,5 +57,16 @@ describe('buildVehicleHistory', () => {
         expect(history.map((event) => event.id)).toEqual(['fuel-1', 'maintenance-3', 'fuel-2']);
         expect(history).toHaveLength(3);
         expect(history[1]).toMatchObject({ title: 'Oil service', amount: 95 });
+    });
+
+    it('includes ownership expenses only for the current vehicle and reflects edits or deletion in the input projection', () => {
+        const expense = { id: 4, clientId: 'expense-1', vehicleId: 1, category: ExpenseCategory.Insurance, totalPaid: 250, description: 'Policy renewal', date: '2026-10-01', odometer: undefined };
+        const otherVehicleExpense = { id: 5, clientId: 'expense-2', vehicleId: 2, category: ExpenseCategory.Parking, totalPaid: 10, date: '2026-11-01' };
+        const history = buildVehicleHistory(vehicle, [], [], [], [expense, otherVehicleExpense]);
+
+        expect(history).toEqual([expect.objectContaining({ id: 'expense-4', title: 'Insurance', amount: 250, detail: 'Policy renewal' })]);
+        expect(buildVehicleHistory(vehicle, [], [], [], [{ ...expense, category: ExpenseCategory.Tax, totalPaid: 260 }])[0])
+            .toMatchObject({ title: 'Vehicle tax', amount: 260 });
+        expect(buildVehicleHistory(vehicle, [], [], [], [])).toEqual([]);
     });
 });

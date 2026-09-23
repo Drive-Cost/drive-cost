@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
+import postgres from 'postgres';
+import { SyncEntity } from '@drivecost/contracts';
 import { createApp } from '../../../src/app';
 import { PostgresRepository } from '../../../src/platform/persistence/postgresRepository';
 
@@ -31,6 +33,7 @@ test('Postgres persists idempotent, user-scoped vehicle sync', { skip: !database
             year: 2022,
             ownershipStartMileage: 12000,
             trackingStartMileage: 15000,
+            trackingStartDate: '2026-09-06',
             currentOdometer: 18000,
         };
 
@@ -61,6 +64,7 @@ test('Postgres persists idempotent, user-scoped vehicle sync', { skip: !database
         assert.equal(storedVehicle.clientId, vehicle.clientId);
         assert.equal(storedVehicle.brand, vehicle.brand);
         assert.equal(storedVehicle.currentOdometer, 18500);
+        assert.equal(storedVehicle.trackingStartDate, '2026-09-06');
         assert.equal(storedVehicle.id, created.json().data.id);
         assert.match(storedVehicle.createdAt as string, /^\d{4}-\d{2}-\d{2}T/);
         assert.match(storedVehicle.updatedAt as string, /^\d{4}-\d{2}-\d{2}T/);
@@ -131,6 +135,7 @@ test('Postgres propagates vehicle and entry changes between two device cursors',
                 liters: 42.5,
                 price: 75.2,
                 odometer: 12_100,
+                fillStatus: 'full',
             },
         });
         assert.equal(createdFuelEntry.statusCode, 201);
@@ -151,16 +156,51 @@ test('Postgres propagates vehicle and entry changes between two device cursors',
         });
         assert.equal(createdMaintenanceEntry.statusCode, 201);
 
+        const createdRecurringExpense = await app.inject({
+            method: 'POST',
+            url: '/recurring-expenses',
+            headers,
+            payload: {
+                clientId: 'recurring_two_device_1',
+                vehicleClientId: vehicle.clientId,
+                category: 'insurance',
+                amount: 480,
+                periodMonths: 12,
+                startDate: '2026-07-01T00:00:00.000Z',
+                active: true,
+            },
+        });
+        assert.equal(createdRecurringExpense.statusCode, 201);
+
+        const deactivatedRecurringExpense = await app.inject({
+            method: 'POST',
+            url: '/recurring-expenses',
+            headers,
+            payload: {
+                clientId: 'recurring_two_device_1',
+                vehicleClientId: vehicle.clientId,
+                category: 'insurance',
+                amount: 480,
+                periodMonths: 12,
+                startDate: '2026-07-01T00:00:00.000Z',
+                active: false,
+            },
+        });
+        assert.equal(deactivatedRecurringExpense.statusCode, 201);
+        assert.equal(deactivatedRecurringExpense.json().data.id, createdRecurringExpense.json().data.id);
+
         const deviceBInitialPull = await app.inject({ method: 'GET', url: '/sync?after=0', headers });
         assert.equal(deviceBInitialPull.statusCode, 200);
         const initialBody = deviceBInitialPull.json();
         assert.deepEqual(
             initialBody.data.map((change: { entityType: string }) => change.entityType),
-            ['vehicle', 'fuel_entry', 'maintenance_entry'],
+            ['vehicle', 'fuel_entry', 'maintenance_entry', 'recurring_expense', 'recurring_expense'],
         );
         assert.equal(initialBody.data[0].payload.clientId, vehicle.clientId);
         assert.equal(initialBody.data[1].payload.vehicleClientId, vehicle.clientId);
+        assert.equal(initialBody.data[1].payload.fillStatus, 'full');
         assert.equal(initialBody.data[2].payload.vehicleClientId, vehicle.clientId);
+        assert.equal(initialBody.data[4].payload.active, false);
 
         const deviceBUpdate = await app.inject({
             method: 'POST',
@@ -213,6 +253,7 @@ test('Postgres propagates vehicle and entry changes between two device cursors',
                 liters: 42.5,
                 price: 75.2,
                 odometer: 12_100,
+                fillStatus: 'full',
             },
         });
         assert.equal(staleFuelReplay.statusCode, 204);
@@ -235,3 +276,244 @@ test('Postgres propagates vehicle and entry changes between two device cursors',
         await app.close();
     }
 });
+
+test('Postgres schema constraints and sync routes support every shared entity type', { skip: !databaseUrl }, async () => {
+    const sql = postgres(databaseUrl!, { max: 1 });
+    const app = await createPostgresApp();
+
+    try {
+        const constraints = await sql<{ conname: string; definition: string }[]>`
+            SELECT conname, pg_get_constraintdef(oid) AS definition
+            FROM pg_constraint
+            WHERE conname IN ('sync_entities_entity_type_check', 'sync_changes_entity_type_check')
+            ORDER BY conname
+        `;
+        const expectedEntityTypes = Object.values(SyncEntity).sort();
+        assert.equal(constraints.length, 2);
+        for (const constraint of constraints) {
+            assert.deepEqual(entityTypesFromConstraint(constraint.definition), expectedEntityTypes);
+        }
+
+        const headers = authorizationHeaders(await registerUser(app, 'parity'));
+        const vehicle = vehiclePayload('parity-vehicle');
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles', headers, payload: vehicle })).statusCode, 201);
+        for (const child of childRequests(vehicle.clientId, 'parity')) {
+            assert.equal((await app.inject({ method: 'POST', url: child.route, headers, payload: child.payload })).statusCode, 201);
+        }
+
+        const changes = (await app.inject({ method: 'GET', url: '/sync?after=0', headers })).json().data as Array<{ entityType: string }>;
+        assert.deepEqual([...new Set(changes.map((change) => change.entityType))].sort(), expectedEntityTypes);
+    } finally {
+        await app.close();
+        await sql.end();
+    }
+});
+
+test('Postgres keeps every entity, tombstone, and change feed scoped to its authenticated user', { skip: !databaseUrl }, async () => {
+    const app = await createPostgresApp();
+
+    try {
+        const aHeaders = authorizationHeaders(await registerUser(app, 'isolation-a'));
+        const bHeaders = authorizationHeaders(await registerUser(app, 'isolation-b'));
+        const sharedClientId = 'vehicle-same-client-id';
+        const aVehicle = { ...vehiclePayload(sharedClientId), brand: 'A vehicle' };
+        const bVehicle = { ...vehiclePayload(sharedClientId), brand: 'B vehicle' };
+
+        const aCreated = await app.inject({ method: 'POST', url: '/vehicles', headers: aHeaders, payload: aVehicle });
+        const bCreated = await app.inject({ method: 'POST', url: '/vehicles', headers: bHeaders, payload: bVehicle });
+        assert.equal(aCreated.statusCode, 201);
+        assert.equal(bCreated.statusCode, 201);
+        assert.notEqual(aCreated.json().data.id, bCreated.json().data.id);
+
+        assert.deepEqual((await app.inject({ method: 'GET', url: '/vehicles', headers: aHeaders })).json().data.map((vehicle: { brand: string }) => vehicle.brand), ['A vehicle']);
+        assert.deepEqual((await app.inject({ method: 'GET', url: '/vehicles', headers: bHeaders })).json().data.map((vehicle: { brand: string }) => vehicle.brand), ['B vehicle']);
+
+        const aUpdate = await app.inject({ method: 'POST', url: '/vehicles', headers: aHeaders, payload: { ...aVehicle, currentOdometer: 22_000 } });
+        assert.equal(aUpdate.statusCode, 201);
+        assert.equal(aUpdate.json().data.id, aCreated.json().data.id);
+        assert.equal((await app.inject({ method: 'GET', url: '/vehicles', headers: bHeaders })).json().data[0].currentOdometer, bVehicle.currentOdometer);
+
+        assert.equal((await app.inject({ method: 'DELETE', url: `/vehicles/${sharedClientId}`, headers: aHeaders })).statusCode, 204);
+        assert.deepEqual((await app.inject({ method: 'GET', url: '/vehicles', headers: bHeaders })).json().data.map((vehicle: { brand: string }) => vehicle.brand), ['B vehicle']);
+
+        const aParent = vehiclePayload('vehicle-a-parent');
+        const bParent = vehiclePayload('vehicle-b-parent');
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles', headers: aHeaders, payload: aParent })).statusCode, 201);
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles', headers: bHeaders, payload: bParent })).statusCode, 201);
+
+        const aChildren = childRequests(aParent.clientId, 'a-owned');
+        for (const child of aChildren) {
+            assert.equal((await app.inject({ method: 'POST', url: child.route, headers: bHeaders, payload: child.payload })).statusCode, 409);
+            assert.equal((await app.inject({ method: 'POST', url: child.route, headers: aHeaders, payload: child.payload })).statusCode, 201);
+        }
+
+        const aFeed = (await app.inject({ method: 'GET', url: '/sync?after=0', headers: aHeaders })).json();
+        const bFeed = (await app.inject({ method: 'GET', url: '/sync?after=0', headers: bHeaders })).json();
+        assert.equal(aFeed.data.some((change: { payload: { clientId: string } }) => change.payload.clientId === bParent.clientId), false);
+        assert.equal(bFeed.data.some((change: { payload: { vehicleClientId?: string } }) => change.payload.vehicleClientId === aParent.clientId), false);
+
+        const aCursor = aFeed.nextCursor as number;
+        for (const child of aChildren) {
+            assert.equal((await app.inject({ method: 'DELETE', url: `${child.route}/${child.payload.clientId}`, headers: bHeaders })).statusCode, 204);
+        }
+
+        assert.deepEqual((await app.inject({ method: 'GET', url: `/sync?after=${aCursor}`, headers: aHeaders })).json(), { data: [], nextCursor: aCursor });
+        const bAfterDeletes = (await app.inject({ method: 'GET', url: `/sync?after=${bFeed.nextCursor}`, headers: bHeaders })).json();
+        assert.deepEqual(
+            bAfterDeletes.data.map((change: { entityType: string; operation: string }) => `${change.entityType}:${change.operation}`).sort(),
+            aChildren.map((child) => `${child.entityType}:delete`).sort(),
+        );
+
+        const aFinalFeed = (await app.inject({ method: 'GET', url: '/sync?after=0', headers: aHeaders })).json().data as Array<{ entityType: string; operation: string; payload: { clientId: string } }>;
+        for (const child of aChildren) {
+            assert.equal(aFinalFeed.some((change) => change.entityType === child.entityType && change.operation === 'delete' && change.payload.clientId === child.payload.clientId), false);
+        }
+    } finally {
+        await app.close();
+    }
+});
+
+test('Postgres tombstones a vehicle and every supported child without allowing stale replays', { skip: !databaseUrl }, async () => {
+    const app = await createPostgresApp();
+
+    try {
+        const headers = authorizationHeaders(await registerUser(app, 'stale-parent'));
+        const vehicle = vehiclePayload('vehicle-stale-parent');
+        const children = childRequests(vehicle.clientId, 'stale-parent');
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles', headers, payload: vehicle })).statusCode, 201);
+        for (const child of children) {
+            assert.equal((await app.inject({ method: 'POST', url: child.route, headers, payload: child.payload })).statusCode, 201);
+        }
+
+        assert.equal((await app.inject({ method: 'DELETE', url: `/vehicles/${vehicle.clientId}`, headers })).statusCode, 204);
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles', headers, payload: vehicle })).statusCode, 204);
+        for (const child of children) {
+            assert.equal((await app.inject({ method: 'POST', url: child.route, headers, payload: child.payload })).statusCode, 204);
+        }
+
+        const changes = (await app.inject({ method: 'GET', url: '/sync?after=0', headers })).json().data as Array<{ entityType: string; operation: string; payload: { clientId: string } }>;
+        assert.equal(changes.some((change) => change.entityType === SyncEntity.Vehicle && change.operation === 'delete' && change.payload.clientId === vehicle.clientId), true);
+        for (const child of children) {
+            assert.equal(changes.some((change) => change.entityType === child.entityType && change.operation === 'delete' && change.payload.clientId === child.payload.clientId), true);
+        }
+    } finally {
+        await app.close();
+    }
+});
+
+test('Postgres normalizes a concurrent duplicate registration to the duplicate-email response', { skip: !databaseUrl }, async () => {
+    const app = await createPostgresApp();
+    const email = `duplicate-${randomUUID()}@drivecost.test`;
+
+    try {
+        const responses = await Promise.all([
+            app.inject({ method: 'POST', url: '/auth/register', payload: { email, password: 'correct-horse-battery-staple' } }),
+            app.inject({ method: 'POST', url: '/auth/register', payload: { email, password: 'correct-horse-battery-staple' } }),
+        ]);
+        assert.deepEqual(responses.map((response) => response.statusCode).sort(), [201, 409]);
+        assert.equal(responses.find((response) => response.statusCode === 409)!.json().type, 'https://drivecost.app/problems/email-already-registered');
+    } finally {
+        await app.close();
+    }
+});
+
+test('Postgres migrates and atomically rotates independent server-side refresh sessions', { skip: !databaseUrl }, async () => {
+    const sql = postgres(databaseUrl!, { max: 1 });
+    const app = await createPostgresApp();
+    const email = `postgres-session-${randomUUID()}@drivecost.test`;
+    try {
+        const columns = await sql<{ column_name: string }[]>`
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_name = 'auth_sessions'
+          ORDER BY column_name
+        `;
+        assert.deepEqual(columns.map((column) => column.column_name), [
+            'created_at', 'expires_at', 'id', 'last_used_at', 'refresh_token_hash', 'revoked_at', 'user_id',
+        ]);
+
+        const registration = await app.inject({ method: 'POST', url: '/auth/register', payload: { email, password: 'correct-horse-battery-staple' } });
+        assert.equal(registration.statusCode, 201);
+        const deviceA = registration.json() as SessionBody;
+        const deviceBLogin = await app.inject({ method: 'POST', url: '/auth/login', payload: { email, password: 'correct-horse-battery-staple' } });
+        assert.equal(deviceBLogin.statusCode, 200);
+        const deviceB = deviceBLogin.json() as SessionBody;
+        const deviceASessionId = (app.jwt.decode(deviceA.accessToken) as { sid: string }).sid;
+        const [storedSession] = await sql<{ refresh_token_hash: string }[]>`
+          SELECT refresh_token_hash FROM auth_sessions WHERE id = ${deviceASessionId}
+        `;
+        assert.match(storedSession.refresh_token_hash, /^[a-f0-9]{64}$/);
+        assert.notEqual(storedSession.refresh_token_hash, deviceA.refreshToken);
+
+        const concurrentRotation = await Promise.all([
+            app.inject({ method: 'POST', url: '/auth/refresh', payload: { refreshToken: deviceA.refreshToken } }),
+            app.inject({ method: 'POST', url: '/auth/refresh', payload: { refreshToken: deviceA.refreshToken } }),
+        ]);
+        assert.deepEqual(concurrentRotation.map((response) => response.statusCode).sort(), [200, 401]);
+        const rotatedA = concurrentRotation.find((response) => response.statusCode === 200)!.json() as SessionBody;
+        assert.equal((await app.inject({ method: 'POST', url: '/auth/logout', payload: { refreshToken: rotatedA.refreshToken } })).statusCode, 204);
+        assert.equal((await app.inject({ method: 'POST', url: '/auth/refresh', payload: { refreshToken: rotatedA.refreshToken } })).statusCode, 401);
+        assert.equal((await app.inject({ method: 'POST', url: '/auth/refresh', payload: { refreshToken: deviceB.refreshToken } })).statusCode, 200);
+
+        const guestResponse = await app.inject({ method: 'POST', url: '/auth/guest' });
+        assert.equal(guestResponse.statusCode, 201);
+        const guest = guestResponse.json() as SessionBody;
+        const vehicle = vehiclePayload(`postgres-guest-${randomUUID()}`);
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles', headers: authorizationHeaders(guest.accessToken), payload: vehicle })).statusCode, 201);
+        const upgrade = await app.inject({
+            method: 'POST',
+            url: '/auth/upgrade',
+            headers: authorizationHeaders(guest.accessToken),
+            payload: { email: `postgres-upgrade-${randomUUID()}@drivecost.test`, password: 'correct-horse-battery-staple' },
+        });
+        assert.equal(upgrade.statusCode, 200);
+        const upgraded = upgrade.json() as SessionBody;
+        assert.equal(upgraded.user.id, guest.user.id);
+        assert.equal((await app.inject({ method: 'GET', url: '/vehicles', headers: authorizationHeaders(upgraded.accessToken) })).json().data[0].clientId, vehicle.clientId);
+    } finally {
+        await app.close();
+        await sql.end();
+    }
+});
+
+async function createPostgresApp() {
+    return createApp({ jwtSecret: testSecret, logger: false, repository: new PostgresRepository(databaseUrl!) });
+}
+
+async function registerUser(app: Awaited<ReturnType<typeof createPostgresApp>>, prefix: string): Promise<string> {
+    const registration = await app.inject({
+        method: 'POST',
+        url: '/auth/register',
+        payload: { email: `${prefix}-${randomUUID()}@drivecost.test`, password: 'correct-horse-battery-staple' },
+    });
+    assert.equal(registration.statusCode, 201);
+    return registration.json().accessToken as string;
+}
+
+function authorizationHeaders(accessToken: string) {
+    return { authorization: `Bearer ${accessToken}` };
+}
+
+function vehiclePayload(clientId: string) {
+    return { clientId, brand: 'Toyota', model: 'Corolla', year: 2022, ownershipStartMileage: 10_000, trackingStartMileage: 12_000, currentOdometer: 20_000 };
+}
+
+function childRequests(vehicleClientId: string, prefix: string) {
+    return [
+        { entityType: SyncEntity.FuelEntry, route: '/fuel-entries', payload: { clientId: `${prefix}-fuel`, vehicleClientId, date: '2026-09-13T08:00:00.000Z', liters: 40, price: 70, odometer: 20_100, fillStatus: 'full' } },
+        { entityType: SyncEntity.ChargingEntry, route: '/charging-entries', payload: { clientId: `${prefix}-charging`, vehicleClientId, date: '2026-09-13T09:00:00.000Z', kWh: 24, price: 12, odometer: 20_200 } },
+        { entityType: SyncEntity.MaintenanceEntry, route: '/maintenance-entries', payload: { clientId: `${prefix}-maintenance`, vehicleClientId, date: '2026-09-13T10:00:00.000Z', type: 'Service', description: 'Oil change', cost: 100, odometer: 20_300 } },
+        { entityType: SyncEntity.ExpenseEntry, route: '/ownership-expenses', payload: { clientId: `${prefix}-expense`, vehicleClientId, date: '2026-09-13T11:00:00.000Z', category: 'insurance', totalPaid: 480, odometer: 20_400 } },
+        { entityType: SyncEntity.RecurringExpense, route: '/recurring-expenses', payload: { clientId: `${prefix}-recurring`, vehicleClientId, category: 'insurance', amount: 480, periodMonths: 12, startDate: '2026-09-13T00:00:00.000Z', active: true } },
+    ];
+}
+
+function entityTypesFromConstraint(definition: string): string[] {
+    return [...definition.matchAll(/'([^']+)'/g)].map((match) => match[1]).sort();
+}
+
+interface SessionBody {
+    accessToken: string;
+    refreshToken: string;
+    user: { id: string; mode: 'guest' | 'registered' };
+}

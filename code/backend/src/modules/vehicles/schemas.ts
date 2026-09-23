@@ -33,6 +33,7 @@ export const vehicleSyncSchema = {
         transmission: { type: 'string', maxLength: FUEL_TYPE_MAX_LENGTH },
         ownershipStartMileage: { type: 'integer', minimum: 0 },
         trackingStartMileage: { type: 'integer', minimum: 0 },
+        trackingStartDate: { type: ['string', 'null'], format: 'date', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
         currentOdometer: { type: 'integer', minimum: 0 },
     },
 } as const;

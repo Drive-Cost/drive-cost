@@ -2,6 +2,8 @@ import {
     ChargingEntrySyncPayload,
     FuelEntrySyncPayload,
     MaintenanceEntrySyncPayload,
+    ExpenseEntrySyncPayload,
+    RecurringExpenseSyncPayload,
     SyncEntity,
     VehicleSyncPayload,
 } from '../../domain/sync';
@@ -9,6 +11,8 @@ import { ChargingEntry } from '../../models/ChargingEntry';
 import { FuelEntry } from '../../models/FuelEntry';
 import { MaintenanceEntry } from '../../models/MaintenanceEntry';
 import { Vehicle } from '../../models/Vehicle';
+import { ExpenseEntry } from '../../models/ExpenseEntry';
+import { RecurringExpense } from '../../models/RecurringExpense';
 
 export function toVehicleSyncPayload(vehicle: Vehicle): VehicleSyncPayload {
     return {
@@ -23,6 +27,7 @@ export function toVehicleSyncPayload(vehicle: Vehicle): VehicleSyncPayload {
         transmission: vehicle.transmission,
         ownershipStartMileage: vehicle.ownershipStartMileage,
         trackingStartMileage: vehicle.trackingStartMileage,
+        trackingStartDate: vehicle.trackingStartDate ?? null,
         currentOdometer: vehicle.currentOdometer,
     };
 }
@@ -35,6 +40,7 @@ export function toFuelEntrySyncPayload(entry: FuelEntry, vehicleClientId: string
         liters: entry.liters,
         price: entry.price,
         odometer: entry.odometer,
+        fillStatus: entry.fillStatus,
     };
 }
 
@@ -64,12 +70,30 @@ export function toMaintenanceEntrySyncPayload(
     };
 }
 
+export function toExpenseEntrySyncPayload(entry: ExpenseEntry, vehicleClientId: string): ExpenseEntrySyncPayload {
+    return {
+        clientId: requiredClientId(entry.clientId, SyncEntity.ExpenseEntry),
+        vehicleClientId,
+        date: entry.date,
+        category: entry.category,
+        totalPaid: entry.totalPaid,
+        description: entry.description,
+        odometer: entry.odometer,
+    };
+}
+
+export function toRecurringExpenseSyncPayload(entry: RecurringExpense, vehicleClientId: string): RecurringExpenseSyncPayload {
+    return { clientId: requiredClientId(entry.clientId, SyncEntity.RecurringExpense), vehicleClientId, category: entry.category, amount: entry.amount, periodMonths: entry.periodMonths, startDate: entry.startDate, nextDueDate: entry.nextDueDate, description: entry.description, active: entry.active };
+}
+
 
 const ENTITY_DISPLAY_NAME: Record<(typeof SyncEntity)[keyof typeof SyncEntity], string> = {
     [SyncEntity.Vehicle]: 'vehicle',
     [SyncEntity.FuelEntry]: 'fuel entry',
     [SyncEntity.ChargingEntry]: 'charging entry',
     [SyncEntity.MaintenanceEntry]: 'maintenance entry',
+    [SyncEntity.ExpenseEntry]: 'ownership expense',
+    [SyncEntity.RecurringExpense]: 'recurring cost',
 };
 
 function requiredClientId(

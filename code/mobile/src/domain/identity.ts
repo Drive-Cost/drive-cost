@@ -5,6 +5,8 @@ const CLIENT_ID_PREFIX_BY_ENTITY: Record<SyncEntityType, string> = {
     [SyncEntity.FuelEntry]: 'fuel',
     [SyncEntity.ChargingEntry]: 'charging',
     [SyncEntity.MaintenanceEntry]: 'maintenance',
+    [SyncEntity.ExpenseEntry]: 'expense',
+    [SyncEntity.RecurringExpense]: 'recurring-expense',
 };
 
 /**
@@ -14,4 +16,10 @@ const CLIENT_ID_PREFIX_BY_ENTITY: Record<SyncEntityType, string> = {
 export function createClientId(entityType: SyncEntityType): string {
     const random = Math.random().toString(36).slice(2, 12);
     return `${CLIENT_ID_PREFIX_BY_ENTITY[entityType]}_${Date.now().toString(36)}_${random}`;
+}
+
+/** A stable local identity for an entity that is not yet part of sync. */
+export function createLocalClientId(prefix: string): string {
+    const random = Math.random().toString(36).slice(2, 12);
+    return `${prefix}_${Date.now().toString(36)}_${random}`;
 }

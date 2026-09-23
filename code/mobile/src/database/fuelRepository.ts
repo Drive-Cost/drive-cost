@@ -1,4 +1,4 @@
-import { FuelEntry } from '../models/FuelEntry';
+import { FuelEntry, normalizeFuelEntry } from '../models/FuelEntry';
 import { db } from './db';
 import { FuelEntrySyncPayload } from '../domain/sync';
 import * as SQLite from 'expo-sqlite';
@@ -11,22 +11,24 @@ export const addFuelEntry = async (
 ): Promise<void> => {
     await database.runAsync(
         `INSERT INTO fuel_entries
-        (clientId, vehicleId, date, liters, price, odometer)
-        VALUES (?, ?, ?, ?, ?, ?)`,
+        (clientId, vehicleId, date, liters, price, odometer, fillStatus)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
         fuelEntry.clientId ?? null,
         fuelEntry.vehicleId,
         fuelEntry.date,
         fuelEntry.liters,
         fuelEntry.price,
         fuelEntry.odometer,
+        fuelEntry.fillStatus,
     );
 };
 
 export const getFuelEntries = async (vehicleId: number): Promise<FuelEntry[]> => {
-    return db.getAllAsync<FuelEntry>(
+    const entries = await db.getAllAsync<Omit<FuelEntry, 'fillStatus'> & { fillStatus?: unknown }>(
         `SELECT * FROM fuel_entries WHERE vehicleId = ? ORDER BY date DESC, id DESC`,
         vehicleId,
     );
+    return entries.map(normalizeFuelEntry);
 };
 
 export const updateFuelEntry = async (
@@ -38,7 +40,7 @@ export const updateFuelEntry = async (
     await database.runAsync(
         `
       UPDATE fuel_entries
-      SET vehicleId = ?, date = ?, liters = ?, price = ?, odometer = ?
+      SET vehicleId = ?, date = ?, liters = ?, price = ?, odometer = ?, fillStatus = ?
       WHERE id = ?
     `,
         fuelEntry.vehicleId,
@@ -46,6 +48,7 @@ export const updateFuelEntry = async (
         fuelEntry.liters,
         fuelEntry.price,
         fuelEntry.odometer,
+        fuelEntry.fillStatus,
         entryId,
     );
     return { ...fuelEntry, clientId };
@@ -75,14 +78,15 @@ export const upsertFuelEntryFromSync = async (
 
     await database.runAsync(
         `
-      INSERT INTO fuel_entries (clientId, vehicleId, date, liters, price, odometer)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO fuel_entries (clientId, vehicleId, date, liters, price, odometer, fillStatus)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(clientId) DO UPDATE SET
         vehicleId = excluded.vehicleId,
         date = excluded.date,
         liters = excluded.liters,
         price = excluded.price,
-        odometer = excluded.odometer
+        odometer = excluded.odometer,
+        fillStatus = excluded.fillStatus
     `,
         entry.clientId,
         vehicleId,
@@ -90,6 +94,7 @@ export const upsertFuelEntryFromSync = async (
         entry.liters,
         entry.price,
         entry.odometer,
+        entry.fillStatus,
     );
 };
 

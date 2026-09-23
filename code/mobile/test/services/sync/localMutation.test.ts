@@ -85,6 +85,42 @@ describe('createLocalSyncMutation', () => {
         ]);
         expect(replica.events).toEqual(['begin', 'delete', 'enqueue', 'commit', 'trigger-sync']);
     });
+
+    it('Given recurring schedule create, edit, activation changes, and deletion, when each transaction commits, then it queues the matching idempotent operation', async () => {
+        const replica = createReplica();
+        const mutation = createMutation(replica);
+
+        for (const [action, active] of [['create', true], ['edit', true], ['deactivate', false], ['reactivate', true]] as const) {
+            await mutation.persistAndQueue(SyncEntity.RecurringExpense, SyncOperation.Upsert, async (transaction) => {
+                transaction.replica.events.push(action);
+                transaction.replica.writes.push('recurring-entry-1');
+                return {
+                    clientId: 'recurring-entry-1', vehicleClientId: 'vehicle-1', category: 'insurance', amount: 480,
+                    periodMonths: 12, startDate: '2026-01-01T00:00:00.000Z', active,
+                };
+            });
+        }
+        await mutation.persistAndQueue(SyncEntity.RecurringExpense, SyncOperation.Delete, async (transaction) => {
+            transaction.replica.events.push('delete');
+            transaction.replica.writes.push('recurring-entry-1');
+            return { clientId: 'recurring-entry-1' };
+        });
+
+        expect(replica.jobs).toEqual([
+            { entityType: SyncEntity.RecurringExpense, operation: SyncOperation.Upsert, clientId: 'recurring-entry-1', createdAt: CREATED_AT },
+            { entityType: SyncEntity.RecurringExpense, operation: SyncOperation.Upsert, clientId: 'recurring-entry-1', createdAt: CREATED_AT },
+            { entityType: SyncEntity.RecurringExpense, operation: SyncOperation.Upsert, clientId: 'recurring-entry-1', createdAt: CREATED_AT },
+            { entityType: SyncEntity.RecurringExpense, operation: SyncOperation.Upsert, clientId: 'recurring-entry-1', createdAt: CREATED_AT },
+            { entityType: SyncEntity.RecurringExpense, operation: SyncOperation.Delete, clientId: 'recurring-entry-1', createdAt: CREATED_AT },
+        ]);
+        expect(replica.events).toEqual([
+            'begin', 'create', 'enqueue', 'commit', 'trigger-sync',
+            'begin', 'edit', 'enqueue', 'commit', 'trigger-sync',
+            'begin', 'deactivate', 'enqueue', 'commit', 'trigger-sync',
+            'begin', 'reactivate', 'enqueue', 'commit', 'trigger-sync',
+            'begin', 'delete', 'enqueue', 'commit', 'trigger-sync',
+        ]);
+    });
 });
 
 function createMutation(replica: MemoryReplica, options: { failEnqueue?: boolean } = {}) {

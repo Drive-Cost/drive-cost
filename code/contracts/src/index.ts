@@ -3,6 +3,8 @@ export const SyncEntity = {
     FuelEntry: 'fuel_entry',
     ChargingEntry: 'charging_entry',
     MaintenanceEntry: 'maintenance_entry',
+    ExpenseEntry: 'expense_entry',
+    RecurringExpense: 'recurring_expense',
 } as const;
 
 export type SyncEntityType = (typeof SyncEntity)[keyof typeof SyncEntity];
@@ -17,7 +19,94 @@ export const SyncRoute = {
     FuelEntries: '/fuel-entries',
     ChargingEntries: '/charging-entries',
     MaintenanceEntries: '/maintenance-entries',
+    ExpenseEntries: '/ownership-expenses',
+    RecurringExpenses: '/recurring-expenses',
     Changes: '/sync',
+} as const;
+
+export const AuthRoute = {
+    Guest: '/auth/guest',
+    Register: '/auth/register',
+    Login: '/auth/login',
+    Refresh: '/auth/refresh',
+    Upgrade: '/auth/upgrade',
+    Logout: '/auth/logout',
+} as const;
+
+export const UserMode = {
+    Guest: 'guest',
+    Registered: 'registered',
+} as const;
+
+export type UserMode = (typeof UserMode)[keyof typeof UserMode];
+
+export interface SafeUser {
+    id: string;
+    mode: UserMode;
+    email?: string;
+}
+
+export interface CredentialsRequest {
+    email: string;
+    password: string;
+}
+
+export interface RefreshRequest {
+    refreshToken: string;
+}
+
+export interface LogoutRequest {
+    refreshToken: string;
+}
+
+export interface SessionResponse {
+    accessToken: string;
+    refreshToken: string;
+    accessTokenExpiresAt: string;
+    user: SafeUser;
+}
+
+const authEmailSchema = { type: 'string', format: 'email', maxLength: 254 } as const;
+const authPasswordSchema = { type: 'string', minLength: 12, maxLength: 128 } as const;
+const refreshTokenSchema = { type: 'string', minLength: 1, maxLength: 512 } as const;
+
+export const credentialsRequestSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['email', 'password'],
+    properties: { email: authEmailSchema, password: authPasswordSchema },
+} as const;
+
+export const refreshRequestSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['refreshToken'],
+    properties: { refreshToken: refreshTokenSchema },
+} as const;
+
+export const logoutRequestSchema = refreshRequestSchema;
+
+export const safeUserSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'mode'],
+    properties: {
+        id: { type: 'string' },
+        mode: { type: 'string', enum: Object.values(UserMode) },
+        email: authEmailSchema,
+    },
+} as const;
+
+export const sessionResponseSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['accessToken', 'refreshToken', 'accessTokenExpiresAt', 'user'],
+    properties: {
+        accessToken: { type: 'string' },
+        refreshToken: refreshTokenSchema,
+        accessTokenExpiresAt: { type: 'string', format: 'date-time' },
+        user: safeUserSchema,
+    },
 } as const;
 
 export const SyncRouteByEntity = {
@@ -25,7 +114,17 @@ export const SyncRouteByEntity = {
     [SyncEntity.FuelEntry]: SyncRoute.FuelEntries,
     [SyncEntity.ChargingEntry]: SyncRoute.ChargingEntries,
     [SyncEntity.MaintenanceEntry]: SyncRoute.MaintenanceEntries,
+    [SyncEntity.ExpenseEntry]: SyncRoute.ExpenseEntries,
+    [SyncEntity.RecurringExpense]: SyncRoute.RecurringExpenses,
 } as const;
+
+export const FuelFillStatus = {
+    Full: 'full',
+    Partial: 'partial',
+    Unknown: 'unknown',
+} as const;
+
+export type FuelFillStatus = (typeof FuelFillStatus)[keyof typeof FuelFillStatus];
 
 export interface VehicleSyncPayload {
     clientId: string;
@@ -39,6 +138,7 @@ export interface VehicleSyncPayload {
     transmission?: string;
     ownershipStartMileage: number;
     trackingStartMileage: number;
+    trackingStartDate?: string | null;
     currentOdometer: number;
 }
 
@@ -52,6 +152,7 @@ interface EntrySyncPayload {
 export interface FuelEntrySyncPayload extends EntrySyncPayload {
     liters: number;
     price: number;
+    fillStatus: FuelFillStatus;
 }
 
 export interface ChargingEntrySyncPayload extends EntrySyncPayload {
@@ -65,11 +166,40 @@ export interface MaintenanceEntrySyncPayload extends EntrySyncPayload {
     cost: number;
 }
 
+export const ExpenseCategory = {
+    Insurance: 'insurance', Tax: 'tax', Inspection: 'inspection', Tolls: 'tolls', Parking: 'parking', CarWash: 'carWash', FinancingInterest: 'financingInterest', Accessories: 'accessories', Other: 'other',
+} as const;
+export type ExpenseCategory = (typeof ExpenseCategory)[keyof typeof ExpenseCategory];
+
+export interface ExpenseEntrySyncPayload {
+    clientId: string;
+    vehicleClientId: string;
+    date: string;
+    category: ExpenseCategory;
+    totalPaid: number;
+    description?: string;
+    odometer?: number;
+}
+
+export interface RecurringExpenseSyncPayload {
+    clientId: string;
+    vehicleClientId: string;
+    category: ExpenseCategory;
+    amount: number;
+    periodMonths: 1 | 3 | 6 | 12;
+    startDate: string;
+    nextDueDate?: string;
+    description?: string;
+    active: boolean;
+}
+
 export interface SyncPayloadByEntity {
     [SyncEntity.Vehicle]: VehicleSyncPayload;
     [SyncEntity.FuelEntry]: FuelEntrySyncPayload;
     [SyncEntity.ChargingEntry]: ChargingEntrySyncPayload;
     [SyncEntity.MaintenanceEntry]: MaintenanceEntrySyncPayload;
+    [SyncEntity.ExpenseEntry]: ExpenseEntrySyncPayload;
+    [SyncEntity.RecurringExpense]: RecurringExpenseSyncPayload;
 }
 
 export type SyncPayload = SyncPayloadByEntity[SyncEntityType];
@@ -79,10 +209,12 @@ export interface DeleteSyncPayload {
 }
 
 export interface SyncOperationByEntity {
-    [SyncEntity.Vehicle]: typeof SyncOperation.Upsert;
+    [SyncEntity.Vehicle]: SyncOperation;
     [SyncEntity.FuelEntry]: SyncOperation;
     [SyncEntity.ChargingEntry]: SyncOperation;
     [SyncEntity.MaintenanceEntry]: SyncOperation;
+    [SyncEntity.ExpenseEntry]: SyncOperation;
+    [SyncEntity.RecurringExpense]: SyncOperation;
 }
 
 export type SyncPayloadByOperation<
@@ -144,7 +276,7 @@ export function decodeSyncOperation<EntityType extends SyncEntityType>(
     if (value === SyncOperation.Upsert) {
         return value as SyncOperationByEntity[EntityType];
     }
-    if (value === SyncOperation.Delete && entityType !== SyncEntity.Vehicle) {
+    if (value === SyncOperation.Delete) {
         return value as SyncOperationByEntity[EntityType];
     }
     throw new Error('Unsupported sync operation.');
@@ -200,6 +332,8 @@ const syncPayloadDecoderByEntity: {
     [SyncEntity.FuelEntry]: decodeFuelEntry,
     [SyncEntity.ChargingEntry]: decodeChargingEntry,
     [SyncEntity.MaintenanceEntry]: decodeMaintenanceEntry,
+    [SyncEntity.ExpenseEntry]: decodeExpenseEntry,
+    [SyncEntity.RecurringExpense]: decodeRecurringExpense,
 };
 
 function decodeRemoteChange(value: unknown): RemoteChange {
@@ -233,6 +367,7 @@ function decodeVehicle(value: unknown): VehicleSyncPayload {
         transmission: optionalString(payload, 'transmission'),
         ownershipStartMileage: requiredInteger(payload, 'ownershipStartMileage'),
         trackingStartMileage: requiredInteger(payload, 'trackingStartMileage'),
+        trackingStartDate: optionalCalendarDate(payload, 'trackingStartDate'),
         currentOdometer: requiredInteger(payload, 'currentOdometer'),
     };
 }
@@ -243,7 +378,16 @@ function decodeFuelEntry(value: unknown): FuelEntrySyncPayload {
         ...decodeEntryBase(payload),
         liters: requiredNumber(payload, 'liters'),
         price: requiredNumber(payload, 'price'),
+        fillStatus: decodeFuelFillStatus(payload.fillStatus),
     };
+}
+
+function decodeFuelFillStatus(value: unknown): FuelFillStatus {
+    if (value === undefined) return FuelFillStatus.Unknown;
+    if (value === FuelFillStatus.Full || value === FuelFillStatus.Partial || value === FuelFillStatus.Unknown) {
+        return value;
+    }
+    throw new Error('Invalid fillStatus.');
 }
 
 function decodeChargingEntry(value: unknown): ChargingEntrySyncPayload {
@@ -265,6 +409,33 @@ function decodeMaintenanceEntry(value: unknown): MaintenanceEntrySyncPayload {
     };
 }
 
+function decodeExpenseEntry(value: unknown): ExpenseEntrySyncPayload {
+    const payload = requiredRecord(value);
+    return {
+        clientId: requiredString(payload, 'clientId'),
+        vehicleClientId: requiredString(payload, 'vehicleClientId'),
+        date: requiredCalendarDateTime(payload, 'date'),
+        category: decodeExpenseCategory(payload.category),
+        totalPaid: requiredPositiveNumber(payload, 'totalPaid'),
+        description: optionalString(payload, 'description'),
+        odometer: optionalInteger(payload, 'odometer'),
+    };
+}
+
+function decodeRecurringExpense(value: unknown): RecurringExpenseSyncPayload {
+    const payload = requiredRecord(value);
+    const periodMonths = requiredInteger(payload, 'periodMonths');
+    if (periodMonths !== 1 && periodMonths !== 3 && periodMonths !== 6 && periodMonths !== 12) throw new Error('Invalid periodMonths.');
+    const active = payload.active;
+    if (typeof active !== 'boolean') throw new Error('Invalid active.');
+    return {
+        clientId: requiredString(payload, 'clientId'), vehicleClientId: requiredString(payload, 'vehicleClientId'),
+        category: decodeExpenseCategory(payload.category), amount: requiredPositiveNumber(payload, 'amount'), periodMonths,
+        startDate: requiredRecurringDateTime(payload, 'startDate'), nextDueDate: optionalRecurringDateTime(payload, 'nextDueDate'),
+        description: optionalString(payload, 'description'), active,
+    };
+}
+
 function decodeEntryBase(payload: Record<string, unknown>): EntrySyncPayload {
     return {
         clientId: requiredString(payload, 'clientId'),
@@ -272,6 +443,11 @@ function decodeEntryBase(payload: Record<string, unknown>): EntrySyncPayload {
         date: requiredString(payload, 'date'),
         odometer: requiredInteger(payload, 'odometer'),
     };
+}
+
+function decodeExpenseCategory(value: unknown): ExpenseCategory {
+    if (!Object.values(ExpenseCategory).includes(value as ExpenseCategory)) throw new Error('Invalid category.');
+    return value as ExpenseCategory;
 }
 
 function requiredRecord(value: unknown): Record<string, unknown> {
@@ -304,6 +480,23 @@ function optionalString(payload: Record<string, unknown>, field: string): string
     return value;
 }
 
+function optionalCalendarDate(payload: Record<string, unknown>, field: string): string | null {
+    const value = payload[field];
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string' || !isCalendarDate(value)) throw new Error(`Invalid ${field}.`);
+    return value;
+}
+
+function isCalendarDate(value: string): boolean {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return false;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 function requiredInteger(payload: Record<string, unknown>, field: string): number {
     const value = payload[field];
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
@@ -327,4 +520,41 @@ function requiredNumber(payload: Record<string, unknown>, field: string): number
         throw new Error(`Invalid ${field}.`);
     }
     return value;
+}
+
+function requiredPositiveNumber(payload: Record<string, unknown>, field: string): number {
+    const value = payload[field];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error(`Invalid ${field}.`);
+    return value;
+}
+
+function requiredCalendarDateTime(payload: Record<string, unknown>, field: string): string {
+    const value = requiredString(payload, field);
+    if (Number.isNaN(Date.parse(value))) throw new Error(`Invalid ${field}.`);
+    return value;
+}
+
+function optionalCalendarDateTime(payload: Record<string, unknown>, field: string): string | undefined {
+    const value = payload[field];
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) throw new Error(`Invalid ${field}.`);
+    return value;
+}
+
+function requiredRecurringDateTime(payload: Record<string, unknown>, field: string): string {
+    const value = requiredString(payload, field);
+    if (!isValidRecurringDateTime(value)) throw new Error(`Invalid ${field}.`);
+    return value;
+}
+
+function optionalRecurringDateTime(payload: Record<string, unknown>, field: string): string | undefined {
+    const value = payload[field];
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || !isValidRecurringDateTime(value)) throw new Error(`Invalid ${field}.`);
+    return value;
+}
+
+function isValidRecurringDateTime(value: string): boolean {
+    const datePart = /^(\d{4}-\d{2}-\d{2})T/.exec(value)?.[1];
+    return datePart !== undefined && isCalendarDate(datePart) && !Number.isNaN(Date.parse(value));
 }

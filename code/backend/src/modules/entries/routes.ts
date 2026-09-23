@@ -5,8 +5,11 @@ import {
     chargingEntrySyncSchema,
     fuelEntrySyncSchema,
     maintenanceEntrySyncSchema,
+    expenseEntrySyncSchema,
+    recurringExpenseSyncSchema,
 } from './schemas';
-import { problem } from '../../platform/http/problemDetails';
+import { Problems } from '../../platform/http/problemDetails';
+import { HttpStatus } from '../../platform/http/statusCodes';
 
 interface DeleteEntryParams {
     clientId: string;
@@ -25,12 +28,14 @@ const deleteEntryParamsSchema = {
 
 export async function registerEntryRoutes(app: FastifyInstance, repository: DriveCostRepository) {
     registerEntryUpsertRoute(app, repository, '/fuel-entries', SyncEntity.FuelEntry, fuelEntrySyncSchema);
+    registerEntryUpsertRoute(app, repository, '/charging-entries', SyncEntity.ChargingEntry, chargingEntrySyncSchema);
+    registerEntryUpsertRoute(app, repository, '/ownership-expenses', SyncEntity.ExpenseEntry, expenseEntrySyncSchema);
     registerEntryUpsertRoute(
         app,
         repository,
-        '/charging-entries',
-        SyncEntity.ChargingEntry,
-        chargingEntrySyncSchema,
+        '/recurring-expenses',
+        SyncEntity.RecurringExpense,
+        recurringExpenseSyncSchema,
     );
     registerEntryUpsertRoute(
         app,
@@ -43,6 +48,8 @@ export async function registerEntryRoutes(app: FastifyInstance, repository: Driv
     registerEntryDeleteRoute(app, repository, '/fuel-entries/:clientId', SyncEntity.FuelEntry);
     registerEntryDeleteRoute(app, repository, '/charging-entries/:clientId', SyncEntity.ChargingEntry);
     registerEntryDeleteRoute(app, repository, '/maintenance-entries/:clientId', SyncEntity.MaintenanceEntry);
+    registerEntryDeleteRoute(app, repository, '/ownership-expenses/:clientId', SyncEntity.ExpenseEntry);
+    registerEntryDeleteRoute(app, repository, '/recurring-expenses/:clientId', SyncEntity.RecurringExpense);
 }
 
 function registerEntryUpsertRoute(
@@ -52,20 +59,31 @@ function registerEntryUpsertRoute(
     entityType: Exclude<(typeof SyncEntity)[keyof typeof SyncEntity], typeof SyncEntity.Vehicle>,
     schema: object,
 ) {
-    app.post<{ Body: VehicleOwnedEntry }>(route, { onRequest: [app.authenticate], schema: { body: schema } }, async (request, reply) => {
-        const ownsVehicle = await repository.entityExists(
-            request.user.sub,
-            SyncEntity.Vehicle,
-            request.body.vehicleClientId,
-        );
-        if (!ownsVehicle) throw problem('vehicleNotFound');
+    app.post<{ Body: VehicleOwnedEntry }>(
+        route,
+        { onRequest: [app.authenticate], schema: { body: schema } },
+        async (request, reply) => {
+            const ownsVehicle = await repository.entityExists(
+                request.user.sub,
+                SyncEntity.Vehicle,
+                request.body.vehicleClientId,
+            );
+            if (!ownsVehicle) {
+                if (
+                    await repository.entityIsDeleted(request.user.sub, SyncEntity.Vehicle, request.body.vehicleClientId)
+                ) {
+                    return reply.code(HttpStatus.NO_CONTENT).send();
+                }
+                throw Problems.vehicleNotFound();
+            }
 
-        const record = await repository.upsertEntity(request.user.sub, entityType, request.body);
-        if (!record) return reply.code(204).send();
+            const record = await repository.upsertEntity(request.user.sub, entityType, request.body);
+            if (!record) return reply.code(HttpStatus.NO_CONTENT).send();
 
-        reply.code(201);
-        return { data: toPublicRecord(record) };
-    });
+            reply.code(HttpStatus.CREATED);
+            return { data: toPublicRecord(record) };
+        },
+    );
 }
 
 function registerEntryDeleteRoute(
@@ -79,7 +97,7 @@ function registerEntryDeleteRoute(
         { onRequest: [app.authenticate], schema: { params: deleteEntryParamsSchema } },
         async (request, reply) => {
             await repository.deleteEntity(request.user.sub, entityType, request.params.clientId);
-            return reply.code(204).send();
+            return reply.code(HttpStatus.NO_CONTENT).send();
         },
     );
 }

@@ -7,9 +7,21 @@ export type GarageStackParamList = {
 };
 
 export type AppTabParamList = {
-    Dashboard: undefined;
+    Home: undefined;
+    History: undefined;
+    Add: undefined;
     Garage: NavigatorScreenParams<GarageStackParamList> | undefined;
-    Fuel: undefined;
-    Charging: undefined;
-    Maintenance: undefined;
+    Settings: undefined;
+};
+
+export type RootStackParamList = {
+    PrimaryTabs: NavigatorScreenParams<AppTabParamList> | undefined;
+    FuelEntry: undefined;
+    ChargingEntry: undefined;
+    MaintenanceEntry: undefined;
+    OwnershipExpenseEntry: undefined;
+    OwnershipExpenses: undefined;
+    UpdateOdometer: undefined;
+    CreateAccount: undefined;
+    SignIn: undefined;
 };

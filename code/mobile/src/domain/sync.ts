@@ -1,8 +1,11 @@
 export {
     SyncEntity,
+    FuelFillStatus,
+    ExpenseCategory,
     SyncOperation,
     SyncRoute,
     SyncRouteByEntity,
+    AuthRoute,
     decodeProblemDetails,
     decodePullResponse,
     decodeSyncEntity,
@@ -15,6 +18,8 @@ export type {
     FuelEntrySyncPayload,
     ChargingEntrySyncPayload,
     MaintenanceEntrySyncPayload,
+    ExpenseEntrySyncPayload,
+    RecurringExpenseSyncPayload,
     PullResponse,
     ProblemDetails,
     RemoteChange,
@@ -24,4 +29,6 @@ export type {
     SyncPayloadByOperation,
     SyncOperationByEntity,
     VehicleSyncPayload,
+    SafeUser,
+    SessionResponse,
 } from '@drivecost/contracts';

@@ -9,7 +9,7 @@ interface SyncStatusCardProps {
 const copyByPhase = {
     'local-only': {
         title: 'Local-only mode',
-        detail: 'Your data is safely stored on this device. Sync is not configured.',
+        detail: 'Your data is safely stored on this device.',
     },
     offline: {
         title: 'Waiting to sync',
@@ -21,9 +21,19 @@ const copyByPhase = {
         title: 'Sync paused',
         detail: 'Your changes are still safe on this device. Try again when you are ready.',
     },
+    'auth-required': {
+        title: 'Sync paused',
+        detail: 'Your data is safe on this device. Sign in will be needed to resume sync.',
+    },
+    'account-mismatch': {
+        title: 'Sync paused',
+        detail: 'This device’s data belongs to a different account.',
+    },
 } satisfies Record<SyncStatus['phase'], { title: string; detail: string }>;
 
 export default function SyncStatusCard({ status, onRetry }: SyncStatusCardProps) {
+    if (status.phase === 'synced') return null;
+
     const copy = copyByPhase[status.phase];
     const canRetry = status.phase === 'offline' || status.phase === 'error';
 
@@ -32,9 +42,6 @@ export default function SyncStatusCard({ status, onRetry }: SyncStatusCardProps)
             <View style={styles.copy}>
                 <Text style={styles.title}>{copy.title}</Text>
                 <Text style={styles.detail}>{copy.detail}</Text>
-                {status.phase === 'synced' && status.lastSyncedAt ? (
-                    <Text style={styles.timestamp}>Last checked {formatTime(status.lastSyncedAt)}</Text>
-                ) : null}
             </View>
             {canRetry ? (
                 <Pressable accessibilityRole="button" onPress={onRetry} style={styles.retryButton}>
@@ -45,16 +52,11 @@ export default function SyncStatusCard({ status, onRetry }: SyncStatusCardProps)
     );
 }
 
-function formatTime(value: string): string {
-    return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-
 const styles = StyleSheet.create({
     card: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 16, padding: 16, borderRadius: 18 },
     copy: { flex: 1 },
     title: { color: '#0f172a', fontSize: 15, fontWeight: '700' },
     detail: { color: '#475569', lineHeight: 20, marginTop: 4 },
-    timestamp: { color: '#64748b', fontSize: 13, marginTop: 6 },
     retryButton: {
         alignSelf: 'center',
         borderRadius: 10,
@@ -68,4 +70,6 @@ const styles = StyleSheet.create({
     syncing: { backgroundColor: '#dbeafe' },
     synced: { backgroundColor: '#dcfce7' },
     error: { backgroundColor: '#fee2e2' },
+    'auth-required': { backgroundColor: '#fef3c7' },
+    'account-mismatch': { backgroundColor: '#fee2e2' },
 });

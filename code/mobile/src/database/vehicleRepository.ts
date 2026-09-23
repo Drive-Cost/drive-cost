@@ -18,8 +18,9 @@ export const addVehicle = async (vehicle: Vehicle, database: SQLite.SQLiteDataba
       currentMileage,
       ownershipStartMileage,
       trackingStartMileage,
+      trackingStartDate,
       currentOdometer
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         vehicle.clientId ?? null,
         vehicle.brand,
         vehicle.model,
@@ -32,6 +33,7 @@ export const addVehicle = async (vehicle: Vehicle, database: SQLite.SQLiteDataba
         vehicle.currentOdometer,
         vehicle.ownershipStartMileage,
         vehicle.trackingStartMileage,
+        vehicle.trackingStartDate ?? null,
         vehicle.currentOdometer,
     );
 };
@@ -51,10 +53,34 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
       transmission,
       ownershipStartMileage,
       trackingStartMileage,
+      trackingStartDate,
       currentOdometer,
       currentMileage
     FROM vehicles
+    ORDER BY id ASC
   `);
+};
+
+export const deleteVehicleById = async (
+    vehicleId: number,
+    database: SQLite.SQLiteDatabase = db,
+): Promise<string> => {
+    const vehicle = await database.getFirstAsync<Pick<Vehicle, 'clientId'>>(
+        'SELECT clientId FROM vehicles WHERE id = ?',
+        vehicleId,
+    );
+    if (!vehicle?.clientId) throw new Error('Vehicle could not be deleted. Please try again.');
+
+    const result = await database.runAsync('DELETE FROM vehicles WHERE id = ?', vehicleId);
+    if (result.changes !== 1) throw new Error('Vehicle could not be deleted. Please try again.');
+    return vehicle.clientId;
+};
+
+export const deleteVehicleFromSync = async (
+    clientId: string,
+    database: SQLite.SQLiteDatabase = db,
+): Promise<void> => {
+    await database.runAsync('DELETE FROM vehicles WHERE clientId = ?', clientId);
 };
 
 export const getVehicleById = async (
@@ -106,6 +132,7 @@ export const updateVehicle = async (vehicle: Vehicle, database: SQLite.SQLiteDat
           currentMileage = ?,
           ownershipStartMileage = ?,
           trackingStartMileage = ?,
+          trackingStartDate = ?,
           currentOdometer = ?
       WHERE id = ?
     `,
@@ -121,6 +148,7 @@ export const updateVehicle = async (vehicle: Vehicle, database: SQLite.SQLiteDat
         vehicle.currentOdometer,
         vehicle.ownershipStartMileage,
         vehicle.trackingStartMileage,
+        vehicle.trackingStartDate ?? null,
         vehicle.currentOdometer,
         vehicle.id,
     );
@@ -135,8 +163,8 @@ export const upsertVehicleFromSync = async (
       INSERT INTO vehicles (
         clientId, brand, model, year, label, fuelType, engine, powerHp,
         transmission, currentMileage, ownershipStartMileage,
-        trackingStartMileage, currentOdometer
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        trackingStartMileage, trackingStartDate, currentOdometer
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(clientId) DO UPDATE SET
         brand = excluded.brand,
         model = excluded.model,
@@ -149,6 +177,7 @@ export const upsertVehicleFromSync = async (
         currentMileage = excluded.currentMileage,
         ownershipStartMileage = excluded.ownershipStartMileage,
         trackingStartMileage = excluded.trackingStartMileage,
+        trackingStartDate = excluded.trackingStartDate,
         currentOdometer = excluded.currentOdometer
     `,
         vehicle.clientId,
@@ -163,6 +192,7 @@ export const upsertVehicleFromSync = async (
         vehicle.currentOdometer,
         vehicle.ownershipStartMileage,
         vehicle.trackingStartMileage,
+        vehicle.trackingStartDate ?? null,
         vehicle.currentOdometer,
     );
 };

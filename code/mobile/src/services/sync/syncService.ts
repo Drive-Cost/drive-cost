@@ -4,6 +4,9 @@ import { apiClient } from './apiClient';
 import { clearAuthSession, initializeAuthSession } from './authSession';
 import { pullRemoteChanges } from './pullSync/pullSync';
 import { createSyncStatus, SyncStatus } from './syncStatus';
+import { getMobileSession, getMobileSessionState } from './authSession';
+import { getSyncOwner } from '../../database/syncStateRepository';
+import { resolveSyncBoundary } from './syncBoundary';
 
 let activeSync: Promise<void> | null = null;
 const remoteChangeListeners = new Set<(appliedChanges: number) => Promise<void>>();
@@ -27,15 +30,22 @@ function parseSyncPayload(payload: string): unknown {
 }
 
 async function syncQueue() {
-    if (!apiClient.isConfigured) {
+    const owner = await getSyncOwner();
+    const session = getMobileSession();
+    const boundary = resolveSyncBoundary(apiClient.isConfigured, owner, session, getMobileSessionState());
+    if (boundary === 'local-only') {
         syncStatus.update({ phase: 'local-only', error: null });
         return;
     }
-
-    if (!apiClient.hasSession()) {
-        syncStatus.update({ phase: 'offline', error: null });
+    if (boundary === 'account-mismatch') {
+        syncStatus.update({ phase: 'account-mismatch', error: null });
         return;
     }
+    if (boundary === 'reauth-required' || !session || !apiClient.hasSession()) {
+        syncStatus.update({ phase: 'auth-required', error: null });
+        return;
+    }
+    const boundOwner = owner!;
 
     syncStatus.update({ phase: 'syncing', error: null });
 
@@ -52,15 +62,23 @@ async function syncQueue() {
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown sync error';
             await markSyncJobError({ id: jobId, retryCount: job.retryCount }, message);
-            if (isUnauthorized(error)) {
-                await clearAuthSession();
-            }
+            if (isUnauthorized(error)) await clearAuthSession();
             jobError = new Error(message);
             break;
         }
     }
 
-    const appliedChanges = await pullRemoteChanges();
+    let appliedChanges = 0;
+    try {
+        appliedChanges = await pullRemoteChanges(boundOwner.userId);
+    } catch (error) {
+        if (isUnauthorized(error)) {
+            await clearAuthSession();
+            syncStatus.update({ phase: 'auth-required', error: null });
+            return;
+        }
+        throw error;
+    }
     if (appliedChanges > 0) {
         await Promise.all([...remoteChangeListeners].map((listener) => listener(appliedChanges)));
     }

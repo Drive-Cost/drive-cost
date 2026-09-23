@@ -3,8 +3,12 @@ import { StyleSheet, Text, View } from 'react-native';
 interface CostSummaryCardsProps {
     fuelCost: string;
     maintenanceCost: string;
+    ownershipExpenseCost: string;
     costPerKm: string;
-    fuelCostLabel?: string;
+    fuelCostLabel: string;
+    maintenanceCostLabel: string;
+    ownershipExpenseCostLabel: string;
+    costPerKmLabel: string;
 }
 
 interface SummaryCardProps {
@@ -24,14 +28,19 @@ function SummaryCard({ label, value }: SummaryCardProps) {
 export default function CostSummaryCards({
     fuelCost,
     maintenanceCost,
+    ownershipExpenseCost,
     costPerKm,
-    fuelCostLabel = 'Fuel cost',
+    fuelCostLabel,
+    maintenanceCostLabel,
+    ownershipExpenseCostLabel,
+    costPerKmLabel,
 }: CostSummaryCardsProps) {
     return (
         <View style={styles.container}>
             <SummaryCard label={fuelCostLabel} value={fuelCost} />
-            <SummaryCard label="Maintenance cost" value={maintenanceCost} />
-            <SummaryCard label="Cost per km" value={costPerKm} />
+            <SummaryCard label={maintenanceCostLabel} value={maintenanceCost} />
+            <SummaryCard label={ownershipExpenseCostLabel} value={ownershipExpenseCost} />
+            <SummaryCard label={costPerKmLabel} value={costPerKm} />
         </View>
     );
 }

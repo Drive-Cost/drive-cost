@@ -1,0 +1,19 @@
+services:
+    postgres:
+        image: postgres:17-alpine
+        environment:
+            POSTGRES_DB: drivecost_test
+            POSTGRES_USER: drivecost_test
+            POSTGRES_PASSWORD: drivecost-test-password
+        ports:
+            - '55432:5432'
+        volumes:
+            - drivecost-postgres-test:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U drivecost_test -d drivecost_test']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+
+volumes:
+    drivecost-postgres-test:
