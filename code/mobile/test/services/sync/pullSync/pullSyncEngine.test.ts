@@ -2,18 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { RemoteChange, SyncEntity, SyncOperation } from '../../../../src/domain/sync';
 import { PullSyncDependencies, reconcilePulledChanges } from '../../../../src/services/sync/pullSync/pullSyncEngine';
 
-interface MemoryTransaction {
+type MemoryTransaction = {
     readonly marker: 'transaction';
-}
+};
 
-interface MemoryReplica {
+type MemoryReplica = {
     cursor: number;
     readonly vehicles: Map<string, { localId: number; odometer: number }>;
     readonly fuelEntries: Map<string, { vehicleId: number; liters: number }>;
     readonly maintenanceEntries: Map<string, { vehicleId: number; cost: number }>;
     readonly recurringExpenses: Map<string, { vehicleId: number; amount: number; active: boolean }>;
     readonly pendingOutbox: Array<{ clientId: string }>;
-}
+};
 
 describe('reconcilePulledChanges', () => {
     it('replays client IDs safely, resolves entry parents locally, and leaves the outbox untouched', async () => {
