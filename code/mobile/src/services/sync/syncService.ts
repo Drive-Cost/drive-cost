@@ -7,7 +7,7 @@ import {
 } from '../../database/syncRepository';
 import { decodeSyncOperation, decodeSyncPayload } from '../../domain/sync';
 import { apiClient } from './apiClient';
-import { clearAuthSession, initializeAuthSession } from './authSession';
+import { initializeAuthSession } from './authSession';
 import { pullRemoteChanges } from './pullSync/pullSync';
 import { createSyncStatus, SyncStatus } from './syncStatus';
 import { getMobileSession, getMobileSessionState } from './authSession';
@@ -67,19 +67,31 @@ async function syncQueue() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown sync error';
       await markSyncJobError({ id: jobId, retryCount: job.retryCount }, message);
-      if (isUnauthorized(error)) await clearAuthSession();
+
       jobError = new Error(message);
       break;
     }
+  }
+
+  if (getMobileSessionState() === 'reauth-required') {
+    syncStatus.update({ phase: 'auth-required', error: null });
+    return;
+  }
+  if (getMobileSessionState() === 'account-mismatch') {
+    syncStatus.update({ phase: 'account-mismatch', error: null });
+    return;
   }
 
   let appliedChanges = 0;
   try {
     appliedChanges = await pullRemoteChanges(owner.userId);
   } catch (error) {
-    if (isUnauthorized(error)) {
-      await clearAuthSession();
+    if (getMobileSessionState() === 'reauth-required') {
       syncStatus.update({ phase: 'auth-required', error: null });
+      return;
+    }
+    if (getMobileSessionState() === 'account-mismatch') {
+      syncStatus.update({ phase: 'account-mismatch', error: null });
       return;
     }
     throw error;
@@ -93,10 +105,6 @@ async function syncQueue() {
   if (pendingError !== null) throw new Error(pendingError);
 
   syncStatus.update({ phase: 'synced', lastSyncedAt: new Date().toISOString(), error: null });
-}
-
-function isUnauthorized(error: unknown): boolean {
-  return error instanceof Error && 'status' in error && error.status === 401;
 }
 
 export function subscribeToRemoteChanges(listener: (appliedChanges: number) => Promise<void>): () => void {

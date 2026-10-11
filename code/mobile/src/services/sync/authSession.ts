@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
-import { apiClient } from './apiClient';
+import { useAccountStore } from '../../store/accountStore';
+import { SyncApiError, apiClient } from './apiClient';
 import { bindSyncOwner, getSyncOwner } from '../../database/syncStateRepository';
 import type { SessionResponse } from '../../domain/sync';
 
@@ -21,6 +22,22 @@ export type MobileSessionState = 'local-only' | 'authenticated' | 'reauth-requir
 let session: MobileSession | null = null;
 let state: MobileSessionState = 'local-only';
 let activeRefresh: Promise<boolean> | null = null;
+let pendingRotation: MobileSession | null = null;
+let sessionGeneration = 0;
+let secureWrite: Promise<void> = Promise.resolve();
+
+function writeSecureSession(write: () => Promise<void>): Promise<void> {
+  const pending = secureWrite.then(write);
+  secureWrite = pending.catch(() => undefined);
+  return pending;
+}
+
+function publishSession() {
+  useAccountStore.setState({
+    session: session ? { userId: session.userId, mode: session.mode, email: session.email } : null,
+    status: state,
+  });
+}
 
 export function getMobileSession(): MobileSession | null {
   return session;
@@ -37,32 +54,50 @@ export async function persistMobileSession(response: SessionResponse): Promise<M
     accessToken: response.accessToken,
     accessTokenExpiresAt: response.accessTokenExpiresAt,
     refreshToken: response.refreshToken,
+    email: response.user.email,
   });
   if (!next) throw new Error('Invalid session response.');
-  await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify({ ...next, email: response.user.email }));
+  const generation = ++sessionGeneration;
+  pendingRotation = null;
+  await writeSecureSession(async () => {
+    if (sessionGeneration === generation) await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next));
+  });
+  if (sessionGeneration !== generation) return next;
   session = next;
   apiClient.setAccessToken(next.accessToken);
+  pendingRotation = null;
   state = 'authenticated';
+  publishSession();
   return next;
 }
 
 export async function initializeAuthSession(): Promise<MobileSessionState> {
   if (!apiClient.isConfigured) return setLocalOnly();
-  const stored = await SecureStore.getItemAsync(SESSION_KEY);
-  const restored = parseSession(stored);
-  if (!restored) {
-    await migrateLegacyAccessToken();
-    return state;
+  if (state === 'reauth-required' && !session) return state;
+  if (pendingRotation) await saveRotation();
+  if (!session) {
+    const restored = parseSession(await SecureStore.getItemAsync(SESSION_KEY));
+    if (!restored) {
+      await migrateLegacyAccessToken();
+      publishSession();
+      return state;
+    }
+    session = restored;
   }
-  session = restored;
+  const restored = session;
   apiClient.setAccessToken(restored.accessToken);
   const owner = await getSyncOwner();
   if (owner && owner.userId !== restored.userId) {
     state = 'account-mismatch';
     apiClient.setAccessToken(null);
+    publishSession();
     return state;
   }
+  if (owner?.mode === 'guest' && restored.mode === 'registered') {
+    await bindSyncOwner({ userId: restored.userId, mode: restored.mode });
+  }
   state = 'authenticated';
+  publishSession();
   if (expiresSoon(restored.accessTokenExpiresAt)) await refreshAuthSession();
   return state;
 }
@@ -76,39 +111,82 @@ export async function refreshAuthSession(): Promise<boolean> {
 }
 
 export async function clearAuthSession(): Promise<void> {
+  sessionGeneration += 1;
   session = null;
+  pendingRotation = null;
   apiClient.setAccessToken(null);
-  await SecureStore.deleteItemAsync(SESSION_KEY);
   state = 'reauth-required';
+  publishSession();
+  await writeSecureSession(() => SecureStore.deleteItemAsync(SESSION_KEY));
+}
+
+async function saveRotation(): Promise<void> {
+  if (!pendingRotation) return;
+  const next = pendingRotation;
+  await writeSecureSession(async () => {
+    if (pendingRotation === next) await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next));
+  });
+  if (pendingRotation !== next) return;
+  session = next;
+  pendingRotation = null;
+  apiClient.setAccessToken(session.accessToken);
+  state = 'authenticated';
+  publishSession();
 }
 
 async function rotateSession(): Promise<boolean> {
+  if (pendingRotation) {
+    await saveRotation();
+    return true;
+  }
   if (!session) return false;
+  const current = session;
+  const generation = sessionGeneration;
+  let response: SessionResponse;
   try {
-    const response = await apiClient.refresh(session.refreshToken);
-    const next = parseSession({
-      userId: response.user.id,
-      mode: response.user.mode,
-      accessToken: response.accessToken,
-      accessTokenExpiresAt: response.accessTokenExpiresAt,
-      refreshToken: response.refreshToken,
-    });
-    if (!next) throw new Error('Invalid refreshed session.');
-    const owner = await getSyncOwner();
-    if (owner && owner.userId !== next.userId) {
-      state = 'account-mismatch';
-      apiClient.setAccessToken(null);
+    response = await apiClient.refresh(current.refreshToken);
+  } catch (error) {
+    if (session !== current || sessionGeneration !== generation) return false;
+    if (error instanceof SyncApiError && error.status === 401) {
+      await clearAuthSession();
       return false;
     }
-    await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next));
-    session = next;
-    apiClient.setAccessToken(next.accessToken);
-    state = 'authenticated';
-    return true;
-  } catch {
-    await clearAuthSession();
+    // Propagate outages so callers do not mistake an expired access token for
+    // a rejected refresh credential. The stored session remains recoverable.
+    throw error;
+  }
+  if (session !== current || sessionGeneration !== generation) return false;
+  const next: MobileSession = {
+    userId: response.user.id,
+    mode: response.user.mode,
+    accessToken: response.accessToken,
+    accessTokenExpiresAt: response.accessTokenExpiresAt,
+    refreshToken: response.refreshToken,
+    email: response.user.email ?? current.email,
+  };
+  if (next.userId !== current.userId) {
+    state = 'account-mismatch';
+    apiClient.setAccessToken(null);
+    publishSession();
     return false;
   }
+  pendingRotation = next;
+  const owner = await getSyncOwner();
+  if (session !== current || sessionGeneration !== generation) {
+    if (pendingRotation === next) pendingRotation = null;
+    return false;
+  }
+  if (owner && owner.userId !== next.userId) {
+    pendingRotation = null;
+    state = 'account-mismatch';
+    apiClient.setAccessToken(null);
+    publishSession();
+    return false;
+  }
+  // Rotation has consumed the old secret. Retain its replacement in memory
+  // until secure storage succeeds; retry storage before requesting another rotation.
+  await saveRotation();
+  return true;
 }
 
 async function migrateLegacyAccessToken(): Promise<void> {
@@ -127,6 +205,7 @@ function setLocalOnly(): MobileSessionState {
   session = null;
   apiClient.setAccessToken(null);
   state = 'local-only';
+  publishSession();
   return state;
 }
 
@@ -136,10 +215,13 @@ function parseSession(value: unknown): MobileSession | null {
   const candidate = parsed as Record<string, unknown>;
   if (
     typeof candidate.userId !== 'string' ||
+    !candidate.userId ||
     (candidate.mode !== 'guest' && candidate.mode !== 'registered') ||
     typeof candidate.accessToken !== 'string' ||
+    !candidate.accessToken ||
     typeof candidate.accessTokenExpiresAt !== 'string' ||
     typeof candidate.refreshToken !== 'string' ||
+    !candidate.refreshToken ||
     Number.isNaN(Date.parse(candidate.accessTokenExpiresAt))
   )
     return null;

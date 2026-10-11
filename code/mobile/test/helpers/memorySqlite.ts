@@ -60,6 +60,7 @@ export function resetDatabase() {
     CREATE TABLE recurring_expenses (id INTEGER PRIMARY KEY AUTOINCREMENT, clientId TEXT UNIQUE,
       vehicleId INTEGER NOT NULL REFERENCES vehicles(id), category TEXT, amount REAL, periodMonths INTEGER,
       startDate TEXT, nextDueDate TEXT, description TEXT, active INTEGER);
+    CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, entityType TEXT, operation TEXT,
       payload TEXT, createdAt TEXT, lastError TEXT, retryCount INTEGER, nextAttemptAt TEXT);
   `);

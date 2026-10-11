@@ -22,17 +22,18 @@ export async function getSyncOwner(database: SQLite.SQLiteDatabase = db): Promis
   return userId && (mode === 'guest' || mode === 'registered') ? { userId, mode } : null;
 }
 
-export async function bindSyncOwner(owner: SyncOwnerBinding, database: SQLite.SQLiteDatabase = db): Promise<void> {
-  await database.runAsync(
-    `INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)`,
-    SYNC_OWNER_ID_KEY,
-    owner.userId
-  );
-  await database.runAsync(
-    `INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)`,
-    SYNC_OWNER_MODE_KEY,
-    owner.mode
-  );
+export async function bindSyncOwner(owner: SyncOwnerBinding, database?: SQLite.SQLiteDatabase): Promise<void> {
+  const write = async (transaction: SQLite.SQLiteDatabase) => {
+    await transaction.runAsync(
+      `INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?), (?, ?)`,
+      SYNC_OWNER_ID_KEY,
+      owner.userId,
+      SYNC_OWNER_MODE_KEY,
+      owner.mode
+    );
+  };
+  if (database) await write(database);
+  else await db.withExclusiveTransactionAsync(write);
 }
 
 export async function getPullCursor(ownerId: string, database: SQLite.SQLiteDatabase = db): Promise<number> {

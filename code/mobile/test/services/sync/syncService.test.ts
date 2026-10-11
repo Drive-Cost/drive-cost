@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   markSyncJobError: vi.fn(),
   sync: vi.fn(),
   pull: vi.fn(),
+  sessionState: vi.fn(),
+  clearAuthSession: vi.fn(),
 }));
 vi.mock('../../../src/database/syncRepository', () => ({
   getSyncJobs: mocks.getSyncJobs,
@@ -24,9 +26,9 @@ vi.mock('../../../src/services/sync/apiClient', () => ({
 }));
 vi.mock('../../../src/services/sync/authSession', () => ({
   initializeAuthSession: vi.fn(),
-  clearAuthSession: vi.fn(),
+  clearAuthSession: mocks.clearAuthSession,
   getMobileSession: () => ({ userId: 'user_1', mode: 'registered' }),
-  getMobileSessionState: () => 'authenticated',
+  getMobileSessionState: mocks.sessionState,
 }));
 vi.mock('../../../src/database/syncStateRepository', () => ({
   getSyncOwner: async () => ({ userId: 'user_1', mode: 'registered' }),
@@ -53,6 +55,7 @@ const job = {
 beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
+  mocks.sessionState.mockReturnValue('authenticated');
   mocks.getSyncJobs.mockResolvedValue([]);
   mocks.getPendingSyncError.mockResolvedValue(null);
   mocks.sync.mockResolvedValue(undefined);
@@ -99,5 +102,27 @@ describe('sync service scheduling and status', () => {
     await expect(processSyncQueue()).rejects.toThrow('Offline.');
     expect(mocks.markSyncJobError).toHaveBeenCalledWith({ id: 1, retryCount: undefined }, 'Offline.');
     expect(mocks.deleteSyncJob).not.toHaveBeenCalled();
+  });
+  it('does not delete refresh credentials after a rejected access request', async () => {
+    mocks.pull.mockRejectedValue(Object.assign(new Error('Unauthorized access token'), { status: 401 }));
+    const { processSyncQueue } = await import('../../../src/services/sync/syncService');
+    await expect(processSyncQueue()).rejects.toThrow('Unauthorized access token');
+    expect(mocks.clearAuthSession).not.toHaveBeenCalled();
+  });
+
+  it('reports reauthentication when refresh already rejected the credential, without losing queued writes', async () => {
+    mocks.getSyncJobs.mockResolvedValue([job]);
+    mocks.sync.mockImplementation(async () => {
+      mocks.sessionState.mockReturnValue('reauth-required');
+      throw new Error('Refresh session expired');
+    });
+    const { processSyncQueue, subscribeToSyncStatus } = await import('../../../src/services/sync/syncService');
+    const phases: string[] = [];
+    const unsubscribe = subscribeToSyncStatus(status => phases.push(status.phase));
+    await processSyncQueue();
+    unsubscribe();
+    expect(phases.at(-1)).toBe('auth-required');
+    expect(mocks.deleteSyncJob).not.toHaveBeenCalled();
+    expect(mocks.pull).not.toHaveBeenCalled();
   });
 });

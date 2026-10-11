@@ -17,16 +17,23 @@ export async function signIn(email: string, password: string): Promise<void> {
     await apiClient.logout(response.refreshToken);
     throw new AccountOwnershipError('This device contains DriveCost data linked to another account.');
   }
+  await bindSyncOwner({ userId: response.user.id, mode: response.user.mode });
   await persistMobileSession(response);
 }
 
 export async function createAccount(email: string, password: string): Promise<void> {
   const owner = await getSyncOwner();
   const current = getMobileSession();
-  const response =
-    owner?.mode === 'guest' && current?.mode === 'guest'
-      ? await apiClient.upgrade(email.trim(), password)
-      : await apiClient.register(email.trim(), password);
-  const next = await persistMobileSession(response);
-  if (!owner) await bindSyncOwner({ userId: next.userId, mode: next.mode });
+  if (owner && (owner.mode !== 'guest' || current?.mode !== 'guest' || current.userId !== owner.userId)) {
+    throw new AccountOwnershipError('Sign in to the account linked to this device before creating an account.');
+  }
+  const response = owner
+    ? await apiClient.upgrade(email.trim(), password)
+    : await apiClient.register(email.trim(), password);
+  if (owner && response.user.id !== owner.userId) {
+    await apiClient.logout(response.refreshToken);
+    throw new AccountOwnershipError('This device contains DriveCost data linked to another account.');
+  }
+  await bindSyncOwner({ userId: response.user.id, mode: response.user.mode });
+  await persistMobileSession(response);
 }

@@ -5,12 +5,12 @@ import { syncDevice } from '../../services/sync/syncService';
 import { useSyncStore } from '../../store/syncStore';
 import { colors, control, space } from '../../shared/ui/tokens';
 import { appReleaseIdentity, configuredSettingsLinks } from '../../services/app/appIdentity';
-import { useNavigation } from '@react-navigation/native';
-import { getMobileSession } from '../../services/sync/authSession';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
+import { useAccountStore } from '../../store/accountStore';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 import { getSyncOwner } from '../../database/syncStateRepository';
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { initialState, reduce } from './reducer';
 
 export default function SettingsScreen() {
@@ -18,18 +18,27 @@ export default function SettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [state, dispatch] = useReducer(reduce, initialState);
   const { owner } = state;
-  const session = getMobileSession();
+  const { session, status } = useAccountStore();
+  const matchingSession = status === 'authenticated' && session?.userId === owner?.userId ? session : null;
+  const request = useRef(0);
   const loadOwner = useCallback(async () => {
+    const generation = ++request.current;
     dispatch({ type: 'load' });
     try {
-      dispatch({ type: 'loaded', owner: await getSyncOwner() });
+      const owner = await getSyncOwner();
+      if (request.current === generation) dispatch({ type: 'loaded', owner });
     } catch {
-      dispatch({ type: 'failed' });
+      if (request.current === generation) dispatch({ type: 'failed' });
     }
   }, []);
+  const focused = useIsFocused();
   useEffect(() => {
+    if (!focused) return;
     void loadOwner();
-  }, [loadOwner]);
+    return () => {
+      request.current += 1;
+    };
+  }, [focused, loadOwner, session?.userId, session?.mode]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -52,7 +61,7 @@ export default function SettingsScreen() {
                 <Text style={styles.secondaryText}>Try again</Text>
               </Pressable>
             </View>
-          ) : owner?.mode === 'guest' ? (
+          ) : owner?.mode === 'guest' && matchingSession?.mode === 'guest' ? (
             <>
               <View style={styles.row}>
                 <Text style={styles.rowTitle}>Finish setting up your account</Text>
@@ -68,9 +77,9 @@ export default function SettingsScreen() {
                 <Text style={styles.actionText}>Create account</Text>
               </Pressable>
             </>
-          ) : owner && session?.mode === 'registered' ? (
+          ) : owner && matchingSession?.mode === 'registered' ? (
             <View style={styles.row}>
-              <Text style={styles.rowTitle}>{session.email ?? 'DriveCost account'}</Text>
+              <Text style={styles.rowTitle}>{matchingSession.email ?? 'DriveCost account'}</Text>
               <Text style={styles.copy}>
                 {syncStatus.phase === 'synced'
                   ? 'Sync enabled'
