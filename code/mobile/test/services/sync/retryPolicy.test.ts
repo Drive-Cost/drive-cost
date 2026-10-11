@@ -1,7 +1,8 @@
+import { instant } from '../../../src/domain/time';
 import { describe, expect, it } from 'vitest';
 import { nextRetryAt } from '../../../src/services/sync/retryPolicy';
 
-const START_TIME = Date.UTC(2026, 7, 31, 12, 0, 0);
+const START_TIME = instant(Date.UTC(2026, 7, 31, 12, 0, 0));
 
 describe('nextRetryAt', () => {
     it('Given a first failed job, when scheduling a retry, then waits for the initial backoff period', () => {

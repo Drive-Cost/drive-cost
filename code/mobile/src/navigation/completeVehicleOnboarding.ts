@@ -6,7 +6,7 @@ type VehicleOnboardingNavigation = Pick<NativeStackNavigationProp<GarageStackPar
 
 /** Close onboarding and show the useful primary context for the newly active vehicle. */
 export function completeVehicleOnboarding(navigation: VehicleOnboardingNavigation) {
-    navigation.popToTop();
-    const primaryNavigation = navigation.getParent<NavigationProp<AppTabParamList>>();
-    primaryNavigation?.navigate('Home');
+  navigation.popToTop();
+  const primaryNavigation = navigation.getParent<NavigationProp<AppTabParamList>>();
+  primaryNavigation?.navigate('Home');
 }

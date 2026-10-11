@@ -40,6 +40,7 @@ describe('toVehicleSyncPayload', () => {
 
     it('Given a vehicle without a client ID, when preparing it for sync, then rejects it', () => {
         expect(() =>
+            // @ts-expect-error runtime validation still rejects malformed data
             toVehicleSyncPayload({
                 brand: 'Toyota',
                 model: 'Corolla',

@@ -3,93 +3,101 @@ import { SyncEntityType, SyncOperationByEntity } from '../domain/sync';
 import { nextRetryAt } from '../services/sync/retryPolicy';
 import * as SQLite from 'expo-sqlite';
 
-interface SyncJobBase {
-    id?: number;
-    payload: string;
-    createdAt: string;
-    lastError?: string | null;
-    retryCount?: number;
-    nextAttemptAt?: string | null;
-}
+type SyncJobBase = {
+  id?: number;
+  payload: string;
+  createdAt: string;
+  lastError?: string | null;
+  retryCount?: number;
+  nextAttemptAt?: string | null;
+};
 
 export type SyncJobForEntity<EntityType extends SyncEntityType> = SyncJobBase & {
-    entityType: EntityType;
-    operation: SyncOperationByEntity[EntityType];
+  entityType: EntityType;
+  operation: SyncOperationByEntity[EntityType];
 };
 
 export type SyncJob = {
-    [EntityType in SyncEntityType]: SyncJobForEntity<EntityType>;
+  [EntityType in SyncEntityType]: SyncJobForEntity<EntityType>;
 }[SyncEntityType];
 
 export const enqueueSyncJob = async <EntityType extends SyncEntityType>(
-    job: Omit<SyncJobForEntity<EntityType>, 'id'>,
-    database: SQLite.SQLiteDatabase = db,
+  job: Omit<SyncJobForEntity<EntityType>, 'id'>,
+  database: SQLite.SQLiteDatabase = db
 ): Promise<void> => {
-    await database.runAsync(
-        `
+  await database.runAsync(
+    `
       INSERT INTO sync_queue (
         entityType, operation, payload, createdAt, lastError, retryCount, nextAttemptAt
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-        job.entityType,
-        job.operation,
-        job.payload,
-        job.createdAt,
-        job.lastError ?? null,
-        job.retryCount ?? 0,
-        job.nextAttemptAt ?? null,
-    );
+    job.entityType,
+    job.operation,
+    job.payload,
+    job.createdAt,
+    job.lastError ?? null,
+    job.retryCount ?? 0,
+    job.nextAttemptAt ?? null
+  );
 };
 
 export const removePendingVehicleUpserts = async (
-    vehicleClientId: string,
-    database: SQLite.SQLiteDatabase = db,
+  vehicleClientId: string,
+  database: SQLite.SQLiteDatabase = db
 ): Promise<void> => {
-    await database.runAsync(
-        `DELETE FROM sync_queue
+  await database.runAsync(
+    `DELETE FROM sync_queue
          WHERE operation = 'upsert'
            AND (
              (entityType = 'vehicle' AND json_extract(payload, '$.clientId') = ?)
              OR (entityType IN ('fuel_entry', 'charging_entry', 'maintenance_entry', 'expense_entry', 'recurring_expense')
                  AND json_extract(payload, '$.vehicleClientId') = ?)
            )`,
-        vehicleClientId,
-        vehicleClientId,
-    );
+    vehicleClientId,
+    vehicleClientId
+  );
 };
 
 export const getSyncJobs = async (): Promise<SyncJob[]> => {
-    return db.getAllAsync<SyncJob>(
-        `
+  return db.getAllAsync<SyncJob>(
+    `
       SELECT * FROM sync_queue
       WHERE nextAttemptAt IS NULL OR nextAttemptAt <= ?
       ORDER BY createdAt ASC, id ASC
     `,
-        new Date().toISOString(),
-    );
+    new Date().toISOString()
+  );
 };
 
+/** Failed jobs waiting for backoff still prevent an "up to date" status. */
+export async function getPendingSyncError(): Promise<string | null> {
+  const job = await db.getFirstAsync<{ lastError: string }>(
+    `SELECT lastError FROM sync_queue WHERE lastError IS NOT NULL ORDER BY createdAt ASC, id ASC LIMIT 1`
+  );
+  return job?.lastError ?? null;
+}
+
 export const deleteSyncJob = async (jobId: number): Promise<void> => {
-    await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, jobId);
+  await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, jobId);
 };
 
 export const markSyncJobError = async (
-    job: Required<Pick<SyncJobBase, 'id'>> & Pick<SyncJobBase, 'retryCount'>,
-    message: string,
+  job: Required<Pick<SyncJobBase, 'id'>> & Pick<SyncJobBase, 'retryCount'>,
+  message: string
 ): Promise<void> => {
-    const retryCount = (job.retryCount ?? 0) + 1;
+  const retryCount = (job.retryCount ?? 0) + 1;
 
-    await db.runAsync(
-        `
+  await db.runAsync(
+    `
       UPDATE sync_queue
       SET lastError = ?,
           retryCount = ?,
           nextAttemptAt = ?
       WHERE id = ?
         `,
-        message,
-        retryCount,
-        nextRetryAt(retryCount),
-        job.id,
-    );
+    message,
+    retryCount,
+    nextRetryAt(retryCount),
+    job.id
+  );
 };

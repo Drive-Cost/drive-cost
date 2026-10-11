@@ -5,6 +5,7 @@ import { detailScreenHeaders, garageStackHeaders, primaryTabShell, primaryTabsUs
 
 const iceVehicle = {
     id: 1,
+    clientId: 'vehicle-1',
     brand: 'Toyota',
     model: 'Corolla',
     year: 2022,

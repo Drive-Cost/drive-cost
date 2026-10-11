@@ -1,3 +1,6 @@
+import { recordEntry } from '../services/entries/recordEntry';
+import { useVehicleStore } from './vehicleStore';
+import type { CreateFuelEntryInput, UpdateFuelEntryInput } from '../models/FuelEntry';
 import { create } from 'zustand';
 import { addFuelEntry, deleteFuelEntryById, getFuelEntries, updateFuelEntry } from '../database/fuelRepository';
 import { FuelEntry } from '../models/FuelEntry';
@@ -5,49 +8,55 @@ import { persistAndQueueSync } from '../services/sync/offlineSync';
 import { toFuelEntrySyncPayload } from '../services/sync/syncPayload';
 import { createClientId } from '../domain/identity';
 import { SyncEntity, SyncOperation } from '../domain/sync';
-import { requireVehicleClientId } from '../services/sync/vehicleClientId';
 
-interface FuelState {
-    fuelEntries: FuelEntry[];
-    loadFuelEntries: (vehicleId: number) => Promise<void>;
-    createFuelEntry: (entry: FuelEntry) => Promise<void>;
-    updateFuelEntry: (entry: FuelEntry) => Promise<void>;
-    deleteFuelEntry: (entryId: number, vehicleId: number) => Promise<void>;
-}
+type FuelState = {
+  fuelEntries: FuelEntry[];
+  loadFuelEntries: (vehicleId: number) => Promise<void>;
+  createFuelEntry: (entry: CreateFuelEntryInput) => Promise<FuelEntry>;
+  updateFuelEntry: (entry: UpdateFuelEntryInput) => Promise<FuelEntry>;
+  deleteFuelEntry: (entryId: number, vehicleId: number) => Promise<void>;
+};
 
-export const useFuelStore = create<FuelState>((set) => ({
-    fuelEntries: [],
+export const useFuelStore = create<FuelState>(set => ({
+  fuelEntries: [],
 
-    loadFuelEntries: async (vehicleId) => {
-        const entries = await getFuelEntries(vehicleId);
-        set({ fuelEntries: entries });
-    },
+  loadFuelEntries: async vehicleId => {
+    const entries = await getFuelEntries(vehicleId);
+    set({ fuelEntries: entries });
+  },
 
-    createFuelEntry: async (entry) => {
-        const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.FuelEntry) };
-        await persistAndQueueSync(SyncEntity.FuelEntry, SyncOperation.Upsert, async (transaction) => {
-            const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
-            await addFuelEntry(entryToCreate, transaction);
-            return toFuelEntrySyncPayload(entryToCreate, vehicleClientId);
-        });
-        const entries = await getFuelEntries(entry.vehicleId);
-        set({ fuelEntries: entries });
-    },
+  createFuelEntry: async entry => {
+    const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.FuelEntry) };
+    const saved = await recordEntry(
+      SyncEntity.FuelEntry,
+      entry,
+      transaction => addFuelEntry(entryToCreate, transaction),
+      getFuelEntries,
+      toFuelEntrySyncPayload
+    );
+    set({ fuelEntries: saved.entries });
+    useVehicleStore.setState({ vehicles: saved.vehicles });
+    return saved.entry;
+  },
 
-    updateFuelEntry: async (entry) => {
-        await persistAndQueueSync(SyncEntity.FuelEntry, SyncOperation.Upsert, async (transaction) => {
-            const entryToUpdate = await updateFuelEntry(entry, transaction);
-            const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
-            return toFuelEntrySyncPayload(entryToUpdate, vehicleClientId);
-        });
-        set({ fuelEntries: await getFuelEntries(entry.vehicleId) });
-    },
+  updateFuelEntry: async entry => {
+    const saved = await recordEntry(
+      SyncEntity.FuelEntry,
+      entry,
+      transaction => updateFuelEntry(entry, transaction),
+      getFuelEntries,
+      toFuelEntrySyncPayload
+    );
+    set({ fuelEntries: saved.entries });
+    useVehicleStore.setState({ vehicles: saved.vehicles });
+    return saved.entry;
+  },
 
-    deleteFuelEntry: async (entryId, vehicleId) => {
-        await persistAndQueueSync(SyncEntity.FuelEntry, SyncOperation.Delete, async (transaction) => {
-            const clientId = await deleteFuelEntryById(entryId, transaction);
-            return { clientId };
-        });
-        set({ fuelEntries: await getFuelEntries(vehicleId) });
-    },
+  deleteFuelEntry: async (entryId, vehicleId) => {
+    await persistAndQueueSync(SyncEntity.FuelEntry, SyncOperation.Delete, async transaction => {
+      const clientId = await deleteFuelEntryById(entryId, transaction);
+      return { clientId };
+    });
+    set({ fuelEntries: await getFuelEntries(vehicleId) });
+  },
 }));

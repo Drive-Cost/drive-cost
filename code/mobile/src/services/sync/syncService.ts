@@ -1,4 +1,10 @@
-import { deleteSyncJob, getSyncJobs, markSyncJobError, SyncJob } from '../../database/syncRepository';
+import {
+  deleteSyncJob,
+  getSyncJobs,
+  getPendingSyncError,
+  markSyncJobError,
+  SyncJob,
+} from '../../database/syncRepository';
 import { decodeSyncOperation, decodeSyncPayload } from '../../domain/sync';
 import { apiClient } from './apiClient';
 import { clearAuthSession, initializeAuthSession } from './authSession';
@@ -7,122 +13,121 @@ import { createSyncStatus, SyncStatus } from './syncStatus';
 import { getMobileSession, getMobileSessionState } from './authSession';
 import { getSyncOwner } from '../../database/syncStateRepository';
 import { resolveSyncBoundary } from './syncBoundary';
+import { createSyncScheduler } from './syncScheduler';
 
-let activeSync: Promise<void> | null = null;
 const remoteChangeListeners = new Set<(appliedChanges: number) => Promise<void>>();
 const syncStatus = createSyncStatus(apiClient.isConfigured ? 'offline' : 'local-only');
 
 async function syncJob(job: SyncJob): Promise<void> {
-    const operation = decodeSyncOperation(job.entityType, job.operation);
-    await apiClient.sync(
-        job.entityType,
-        operation,
-        decodeSyncPayload(job.entityType, operation, parseSyncPayload(job.payload)),
-    );
+  const operation = decodeSyncOperation(job.entityType, job.operation);
+  await apiClient.sync(
+    job.entityType,
+    operation,
+    decodeSyncPayload(job.entityType, operation, parseSyncPayload(job.payload))
+  );
 }
 
 function parseSyncPayload(payload: string): unknown {
-    try {
-        return JSON.parse(payload) as unknown;
-    } catch {
-        throw new Error('A queued sync payload is invalid.');
-    }
+  try {
+    return JSON.parse(payload) as unknown;
+  } catch {
+    throw new Error('A queued sync payload is invalid.');
+  }
 }
 
 async function syncQueue() {
-    const owner = await getSyncOwner();
-    const session = getMobileSession();
-    const boundary = resolveSyncBoundary(apiClient.isConfigured, owner, session, getMobileSessionState());
-    if (boundary === 'local-only') {
-        syncStatus.update({ phase: 'local-only', error: null });
-        return;
-    }
-    if (boundary === 'account-mismatch') {
-        syncStatus.update({ phase: 'account-mismatch', error: null });
-        return;
-    }
-    if (boundary === 'reauth-required' || !session || !apiClient.hasSession()) {
-        syncStatus.update({ phase: 'auth-required', error: null });
-        return;
-    }
-    const boundOwner = owner!;
+  const owner = await getSyncOwner();
+  const session = getMobileSession();
+  const boundary = resolveSyncBoundary(apiClient.isConfigured, owner, session, getMobileSessionState());
+  if (boundary === 'local-only' || !owner) {
+    syncStatus.update({ phase: 'local-only', error: null });
+    return;
+  }
+  if (boundary === 'account-mismatch') {
+    syncStatus.update({ phase: 'account-mismatch', error: null });
+    return;
+  }
+  if (boundary === 'reauth-required' || !session || !apiClient.hasSession()) {
+    syncStatus.update({ phase: 'auth-required', error: null });
+    return;
+  }
 
-    syncStatus.update({ phase: 'syncing', error: null });
+  syncStatus.update({ phase: 'syncing', error: null });
 
-    const jobs = await getSyncJobs();
-    let jobError: Error | null = null;
+  const jobs = await getSyncJobs();
+  let jobError: Error | null = null;
 
-    for (const job of jobs) {
-        const jobId = job.id;
-        if (jobId === undefined) continue;
+  for (const job of jobs) {
+    const jobId = job.id;
+    if (jobId === undefined) continue;
 
-        try {
-            await syncJob(job);
-            await deleteSyncJob(jobId);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Unknown sync error';
-            await markSyncJobError({ id: jobId, retryCount: job.retryCount }, message);
-            if (isUnauthorized(error)) await clearAuthSession();
-            jobError = new Error(message);
-            break;
-        }
-    }
-
-    let appliedChanges = 0;
     try {
-        appliedChanges = await pullRemoteChanges(boundOwner.userId);
+      await syncJob(job);
+      await deleteSyncJob(jobId);
     } catch (error) {
-        if (isUnauthorized(error)) {
-            await clearAuthSession();
-            syncStatus.update({ phase: 'auth-required', error: null });
-            return;
-        }
-        throw error;
+      const message = error instanceof Error ? error.message : 'Unknown sync error';
+      await markSyncJobError({ id: jobId, retryCount: job.retryCount }, message);
+      if (isUnauthorized(error)) await clearAuthSession();
+      jobError = new Error(message);
+      break;
     }
-    if (appliedChanges > 0) {
-        await Promise.all([...remoteChangeListeners].map((listener) => listener(appliedChanges)));
+  }
+
+  let appliedChanges = 0;
+  try {
+    appliedChanges = await pullRemoteChanges(owner.userId);
+  } catch (error) {
+    if (isUnauthorized(error)) {
+      await clearAuthSession();
+      syncStatus.update({ phase: 'auth-required', error: null });
+      return;
     }
+    throw error;
+  }
+  if (appliedChanges > 0) {
+    await Promise.all([...remoteChangeListeners].map(listener => listener(appliedChanges)));
+  }
 
-    if (jobError) throw jobError;
+  if (jobError) throw jobError;
+  const pendingError = await getPendingSyncError();
+  if (pendingError !== null) throw new Error(pendingError);
 
-    syncStatus.update({ phase: 'synced', lastSyncedAt: new Date().toISOString(), error: null });
+  syncStatus.update({ phase: 'synced', lastSyncedAt: new Date().toISOString(), error: null });
 }
 
 function isUnauthorized(error: unknown): boolean {
-    return error instanceof Error && 'status' in error && error.status === 401;
+  return error instanceof Error && 'status' in error && error.status === 401;
 }
 
 export function subscribeToRemoteChanges(listener: (appliedChanges: number) => Promise<void>): () => void {
-    remoteChangeListeners.add(listener);
-    return () => remoteChangeListeners.delete(listener);
+  remoteChangeListeners.add(listener);
+  return () => remoteChangeListeners.delete(listener);
 }
 
 export function subscribeToSyncStatus(listener: (status: SyncStatus) => void): () => void {
-    return syncStatus.subscribe(listener);
+  return syncStatus.subscribe(listener);
 }
 
 export async function syncDevice(): Promise<void> {
-    try {
-        await initializeAuthSession();
-    } catch {
-        // Syncing below exposes a recoverable offline status without blocking local use.
-    }
+  try {
+    await initializeAuthSession();
+  } catch {
+    // Syncing below exposes a recoverable offline status without blocking local use.
+  }
 
-    return processSyncQueue();
+  return processSyncQueue();
 }
 
 export function processSyncQueue(): Promise<void> {
-    if (!activeSync) {
-        activeSync = syncQueue()
-            .catch((error) => {
-                const message = error instanceof Error ? error.message : 'Unknown sync error';
-                syncStatus.update({ phase: 'error', error: message });
-                throw error;
-            })
-            .finally(() => {
-                activeSync = null;
-            });
-    }
-
-    return activeSync;
+  return syncScheduler.request();
 }
+
+const syncScheduler = createSyncScheduler(async () => {
+  try {
+    await syncQueue();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown sync error';
+    syncStatus.update({ phase: 'error', error: message });
+    throw error;
+  }
+});

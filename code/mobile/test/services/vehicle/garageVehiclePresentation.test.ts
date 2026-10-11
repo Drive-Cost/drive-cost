@@ -3,6 +3,7 @@ import { getGarageVehiclePresentation } from '../../../src/services/vehicle/gara
 
 const vehicle = {
     id: 7,
+    clientId: 'vehicle-7',
     brand: 'Audi',
     model: 'A4',
     year: 2002,

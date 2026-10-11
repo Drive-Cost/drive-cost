@@ -7,40 +7,9 @@ import {
 } from '../../../src/services/vehicle/costCalculator';
 
 describe('ownership cost calculations', () => {
-    it('sums fuel and maintenance independently', () => {
-        expect(
-            calculateTotalEnergyCost([
-                {
-                    vehicleId: 1,
-                    date: '2026-01-01',
-                    quantity: 40,
-                    amount: 68,
-                    odometer: 12000,
-                    source: 'fuel',
-                },
-                {
-                    vehicleId: 1,
-                    date: '2026-01-15',
-                    quantity: 35,
-                    amount: 61.5,
-                    odometer: 12600,
-                    source: 'fuel',
-                },
-            ]),
-        ).toBe(129.5);
-
-        expect(
-            calculateTotalMaintenanceCost([
-                {
-                    vehicleId: 1,
-                    type: 'Service',
-                    description: 'Annual service',
-                    cost: 220,
-                    date: '2026-02-01',
-                    odometer: 13000,
-                },
-            ]),
-        ).toBe(220);
+    it('sums fuel and maintenance independently without requiring persistence identity', () => {
+        expect(calculateTotalEnergyCost([{ amount: 68 }, { amount: 61.5 }])).toBe(129.5);
+        expect(calculateTotalMaintenanceCost([{ cost: 220 }])).toBe(220);
     });
 
     it('returns an unavailable cost per km when distance is not positive', () => {

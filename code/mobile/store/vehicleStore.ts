@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Vehicle } from '../src/models/Vehicle';
 
-interface VehicleState {
+type VehicleState = {
     vehicles: Vehicle[];
     addVehicle: (vehicle: Vehicle) => void;
 }
