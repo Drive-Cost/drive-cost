@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+import { useVehicleData } from '../../hooks/useVehicleData';
+import type { VehicleDataSource } from '../../hooks/useVehicleData';
+import { VehicleDataNotice } from '../../components/VehicleDataNotice';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useChargingStore } from '../../store/chargingStore';
@@ -11,33 +13,35 @@ import { buildVehicleHistory } from '../../services/vehicle/vehicleHistory';
 import { getActiveVehicle } from '../../services/vehicle/activeVehicle';
 import { colors, control, space } from '../../shared/ui/tokens';
 
+const dataSources: readonly VehicleDataSource[] = ['fuel', 'charging', 'maintenance', 'expenses'];
+
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function HistoryScreen() {
   const { vehicles, activeVehicleId } = useVehicleStore();
-  const { fuelEntries, loadFuelEntries } = useFuelStore();
-  const { chargingEntries, loadChargingEntries } = useChargingStore();
-  const { maintenanceEntries, loadMaintenanceEntries } = useMaintenanceStore();
-  const { expenseEntries, loadExpenseEntries } = useExpenseStore();
+  const { fuelEntries } = useFuelStore();
+  const { chargingEntries } = useChargingStore();
+  const { maintenanceEntries } = useMaintenanceStore();
+  const { expenseEntries } = useExpenseStore();
   const vehicle = getActiveVehicle(vehicles, activeVehicleId);
 
-  useEffect(() => {
-    if (!activeVehicleId) return;
-    void Promise.all([
-      loadFuelEntries(activeVehicleId),
-      loadChargingEntries(activeVehicleId),
-      loadMaintenanceEntries(activeVehicleId),
-      loadExpenseEntries(activeVehicleId),
-    ]);
-  }, [activeVehicleId, loadChargingEntries, loadExpenseEntries, loadFuelEntries, loadMaintenanceEntries]);
+  const data = useVehicleData(activeVehicleId, dataSources);
 
   if (!vehicle || activeVehicleId === null) {
     return (
       <SafeAreaView edges={['top']} style={styles.emptyState}>
         <Text style={styles.title}>No active vehicle yet</Text>
         <Text style={styles.copy}>Choose or add a vehicle in Garage to see its recorded history.</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (data.status !== 'ready') {
+    return (
+      <SafeAreaView edges={['top']} style={styles.emptyState}>
+        <VehicleDataNotice status={data.status} onRetry={data.retry} />
       </SafeAreaView>
     );
   }

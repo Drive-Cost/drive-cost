@@ -1,4 +1,6 @@
-import { useEffect } from 'react';
+import { useVehicleData } from '../../hooks/useVehicleData';
+import type { VehicleDataSource } from '../../hooks/useVehicleData';
+import { VehicleDataNotice } from '../../components/VehicleDataNotice';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -29,6 +31,8 @@ import { calculateTrackedCost } from '../../services/vehicle/trackedCost';
 import { buildVehicleHistory } from '../../services/vehicle/vehicleHistory';
 import { buildVehicleInsights } from '../../services/vehicle/vehicleInsights';
 
+const dataSources: readonly VehicleDataSource[] = ['fuel', 'charging', 'maintenance', 'expenses', 'recurring'];
+
 type DashboardScreenProps = BottomTabScreenProps<AppTabParamList, 'Home'>;
 
 function formatDate(value: string) {
@@ -37,32 +41,15 @@ function formatDate(value: string) {
 
 export default function DashboardScreen({ navigation }: DashboardScreenProps) {
   const { vehicles, activeVehicleId } = useVehicleStore();
-  const { fuelEntries, loadFuelEntries } = useFuelStore();
-  const { chargingEntries, loadChargingEntries } = useChargingStore();
-  const { maintenanceEntries, loadMaintenanceEntries } = useMaintenanceStore();
-  const { expenseEntries, loadExpenseEntries } = useExpenseStore();
-  const { recurringExpenses, loadRecurringExpenses } = useRecurringExpenseStore();
+  const { fuelEntries } = useFuelStore();
+  const { chargingEntries } = useChargingStore();
+  const { maintenanceEntries } = useMaintenanceStore();
+  const { expenseEntries } = useExpenseStore();
+  const { recurringExpenses } = useRecurringExpenseStore();
   const syncStatus = useSyncStore();
   const vehicle = getActiveVehicle(vehicles, activeVehicleId);
 
-  useEffect(() => {
-    if (activeVehicleId === null) return;
-
-    void Promise.all([
-      loadFuelEntries(activeVehicleId),
-      loadChargingEntries(activeVehicleId),
-      loadMaintenanceEntries(activeVehicleId),
-      loadExpenseEntries(activeVehicleId),
-      loadRecurringExpenses(activeVehicleId),
-    ]);
-  }, [
-    activeVehicleId,
-    loadChargingEntries,
-    loadExpenseEntries,
-    loadFuelEntries,
-    loadMaintenanceEntries,
-    loadRecurringExpenses,
-  ]);
+  const data = useVehicleData(activeVehicleId, dataSources);
 
   if (!vehicle || activeVehicleId === null) {
     const creationDestination = getVehicleCreationDestination();
@@ -79,6 +66,14 @@ export default function DashboardScreen({ navigation }: DashboardScreenProps) {
         >
           <Text style={styles.primaryButtonText}>{emptyState.actionLabel}</Text>
         </Pressable>
+      </SafeAreaView>
+    );
+  }
+
+  if (data.status !== 'ready') {
+    return (
+      <SafeAreaView edges={['top']} style={styles.emptyState}>
+        <VehicleDataNotice status={data.status} onRetry={data.retry} />
       </SafeAreaView>
     );
   }

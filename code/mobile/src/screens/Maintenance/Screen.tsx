@@ -1,3 +1,6 @@
+import { useVehicleData } from '../../hooks/useVehicleData';
+import type { VehicleDataSource } from '../../hooks/useVehicleData';
+import { VehicleDataNotice } from '../../components/VehicleDataNotice';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,13 +14,14 @@ import { MaintenanceEntry } from '../../models/MaintenanceEntry';
 import { useEntryEditor } from '../../hooks/useEntryEditor/useEntryEditor';
 import { reduce } from './reducer';
 import type { Input } from './reducer';
-import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../../services/entries/entryError';
 import { toCalendarDate, todayCalendarDate } from '../../domain/entryDate';
 import { maintenanceIntroCopy } from '../../services/vehicle/vehicleCopy';
 import { QuickAddField } from '../../components/entry/QuickAddField';
 import { QuickAddVehicleContext } from '../../components/entry/QuickAddVehicleContext';
 import { RootStackParamList } from '../../navigation/types';
 import { completeQuickAdd } from '../../navigation/completeQuickAdd';
+
+const dataSources: readonly VehicleDataSource[] = ['maintenance'];
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -26,17 +30,14 @@ function formatDate(value: string) {
 type MaintenanceScreenProps = NativeStackScreenProps<RootStackParamList, 'MaintenanceEntry'>;
 
 export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps) {
-  const {
-    maintenanceEntries,
-    createMaintenanceEntry,
-    updateMaintenanceEntry,
-    deleteMaintenanceEntry,
-    loadMaintenanceEntries,
-  } = useMaintenanceStore();
+  const { maintenanceEntries, createMaintenanceEntry, updateMaintenanceEntry, deleteMaintenanceEntry } =
+    useMaintenanceStore();
   const { vehicles, activeVehicleId } = useVehicleStore();
 
   const [showOptionalDetails, setShowOptionalDetails] = useState(false);
   const {
+    isSaving,
+    submit,
     formInput,
     error,
     setError,
@@ -49,12 +50,7 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
   } = useEntryEditor(createEmptyMaintenanceForm, toInput, reduce);
 
   const vehicle = vehicles.find(item => item.id === activeVehicleId);
-  useEffect(() => {
-    if (!activeVehicleId) return;
-    void loadMaintenanceEntries(activeVehicleId).catch(() =>
-      setError('Unable to load maintenance history. Please try again.')
-    );
-  }, [activeVehicleId, loadMaintenanceEntries, setError]);
+  const data = useVehicleData(activeVehicleId, dataSources);
 
   useEffect(() => {
     cancelIfVehicleChanged(activeVehicleId);
@@ -91,7 +87,7 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
       }
     }
 
-    try {
+    const saved = await submit(async () => {
       if (editingEntry) {
         await updateMaintenanceEntry({
           ...editingEntry,
@@ -111,15 +107,11 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
           odometer: result.value.odometer,
         });
       }
-
-      clearEditor();
-      if (!editingEntry) completeQuickAdd(navigation);
-    } catch (error) {
-      setError(entryErrorMessage(error, ENTRY_SAVE_FAILURE_MESSAGE));
-    }
+    });
+    if (saved && !editingEntry) completeQuickAdd(navigation);
   };
 
-  const recentMaintenanceEntries = [...maintenanceEntries]
+  const recentMaintenanceEntries = [...maintenanceEntries.filter(entry => entry.vehicleId === activeVehicleId)]
     .sort((left, right) => right.date.localeCompare(left.date))
     .slice(0, 6);
 
@@ -128,17 +120,20 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
       <Text style={styles.title}>{editingEntry ? 'Edit maintenance' : 'Add maintenance'}</Text>
       <Text style={styles.subtitle}>{maintenanceIntroCopy}</Text>
 
+      <VehicleDataNotice status={data.status} onRetry={data.retry} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {vehicle ? <QuickAddVehicleContext vehicle={vehicle} /> : null}
 
       <QuickAddField
+        editable={!isSaving}
         label="What was done"
         value={formInput.type}
         onChangeText={value => updateFormInput('type', value)}
       />
 
       <QuickAddField
+        editable={!isSaving}
         label="Total paid"
         value={formInput.cost}
         keyboardType="decimal-pad"
@@ -146,6 +141,7 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
       />
 
       <QuickAddField
+        editable={!isSaving}
         label="Odometer"
         value={formInput.odometer}
         keyboardType="number-pad"
@@ -153,6 +149,7 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
       />
 
       <QuickAddField
+        editable={!isSaving}
         label="Date"
         placeholder="YYYY-MM-DD"
         value={formInput.date}
@@ -161,6 +158,7 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
 
       {editingEntry || showOptionalDetails ? (
         <QuickAddField
+          editable={!isSaving}
           label="Description"
           optional
           value={formInput.description}
@@ -178,17 +176,20 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
       )}
 
       <Pressable
+        accessibilityState={{ disabled: isSaving || activeVehicleId === null, busy: isSaving }}
         style={[styles.button, !activeVehicleId && styles.buttonDisabled]}
         accessibilityRole="button"
         accessibilityLabel={editingEntry ? 'Save maintenance changes' : 'Save maintenance'}
-        disabled={!activeVehicleId}
+        disabled={isSaving || activeVehicleId === null}
         onPress={handleSave}
       >
-        <Text style={styles.buttonText}>{editingEntry ? 'Update maintenance entry' : 'Save maintenance entry'}</Text>
+        <Text style={styles.buttonText}>
+          {isSaving ? 'Saving…' : editingEntry ? 'Update maintenance entry' : 'Save maintenance entry'}
+        </Text>
       </Pressable>
 
       {editingEntry ? (
-        <Pressable style={styles.secondaryButton} onPress={clearEditor}>
+        <Pressable style={styles.secondaryButton} disabled={isSaving} onPress={clearEditor}>
           <Text style={styles.secondaryButtonText}>Cancel edit</Text>
         </Pressable>
       ) : null}
@@ -201,7 +202,7 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
         <Text style={styles.historyTitle}>Recent maintenance</Text>
         <Text style={styles.historySubtitle}>Repairs and regular service stay visible in one local timeline.</Text>
 
-        {recentMaintenanceEntries.length === 0 ? (
+        {data.status !== 'ready' ? null : recentMaintenanceEntries.length === 0 ? (
           <Text style={styles.emptyHistory}>No maintenance entries yet. Your saved services will show up here.</Text>
         ) : (
           recentMaintenanceEntries.map(entry => {
@@ -217,11 +218,13 @@ export default function MaintenanceScreen({ navigation }: MaintenanceScreenProps
                 <View style={styles.historyActions}>
                   <Text style={styles.historyAmount}>{formatCurrency(entry.cost)}</Text>
                   <EditEntryButton
+                    disabled={isSaving}
                     onPress={() => {
                       startEditing(entry);
                     }}
                   />
                   <DeleteEntryButton
+                    disabled={isSaving}
                     entryId={entry.id}
                     vehicleId={activeVehicleId}
                     onDelete={handleDelete}

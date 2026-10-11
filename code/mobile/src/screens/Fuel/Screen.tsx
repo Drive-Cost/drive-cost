@@ -1,3 +1,6 @@
+import { useVehicleData } from '../../hooks/useVehicleData';
+import type { VehicleDataSource } from '../../hooks/useVehicleData';
+import { VehicleDataNotice } from '../../components/VehicleDataNotice';
 import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -19,13 +22,14 @@ import { FuelEntry, FuelFillStatus } from '../../models/FuelEntry';
 import { useEntryEditor } from '../../hooks/useEntryEditor/useEntryEditor';
 import { reduce } from './reducer';
 import type { Input } from './reducer';
-import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../../services/entries/entryError';
 import { toCalendarDate, todayCalendarDate } from '../../domain/entryDate';
 import { energyTransactionCostLabel, fuelFillCopy } from '../../services/vehicle/vehicleCopy';
 import { QuickAddField } from '../../components/entry/QuickAddField';
 import { QuickAddVehicleContext } from '../../components/entry/QuickAddVehicleContext';
 import { RootStackParamList } from '../../navigation/types';
 import { completeQuickAdd } from '../../navigation/completeQuickAdd';
+
+const dataSources: readonly VehicleDataSource[] = ['fuel'];
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -34,10 +38,12 @@ function formatDate(value: string) {
 type FuelScreenProps = NativeStackScreenProps<RootStackParamList, 'FuelEntry'>;
 
 export default function FuelScreen({ navigation }: FuelScreenProps) {
-  const { fuelEntries, createFuelEntry, updateFuelEntry, deleteFuelEntry, loadFuelEntries } = useFuelStore();
+  const { fuelEntries, createFuelEntry, updateFuelEntry, deleteFuelEntry } = useFuelStore();
   const { vehicles, activeVehicleId } = useVehicleStore();
 
   const {
+    isSaving,
+    submit,
     formInput,
     error,
     setError,
@@ -55,10 +61,7 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
   const energyUnitLabel = getEnergyUnitLabel(vehicle);
   const activeFuelEntries = fuelEntries.filter(entry => entry.vehicleId === activeVehicleId);
 
-  useEffect(() => {
-    if (!activeVehicleId) return;
-    void loadFuelEntries(activeVehicleId).catch(() => setError('Unable to load fill-up history. Please try again.'));
-  }, [activeVehicleId, loadFuelEntries, setError]);
+  const data = useVehicleData(activeVehicleId, dataSources);
 
   useEffect(() => {
     cancelIfVehicleChanged(activeVehicleId);
@@ -119,7 +122,7 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
       }
     }
 
-    try {
+    const saved = await submit(async () => {
       if (editingEntry) {
         await updateFuelEntry({
           ...editingEntry,
@@ -139,12 +142,8 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
           fillStatus: resolvedFillStatus,
         });
       }
-
-      clearEditor();
-      if (!editingEntry) completeQuickAdd(navigation);
-    } catch (error) {
-      setError(entryErrorMessage(error, ENTRY_SAVE_FAILURE_MESSAGE));
-    }
+    });
+    if (saved && !editingEntry) completeQuickAdd(navigation);
   };
 
   const recentFuelEntries = [...activeFuelEntries]
@@ -162,6 +161,7 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
           : getEnergyIntroCopy(vehicle)}
       </Text>
 
+      <VehicleDataNotice status={data.status} onRetry={data.retry} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {vehicle ? <QuickAddVehicleContext vehicle={vehicle} /> : null}
@@ -169,6 +169,7 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
       {!isElectric || editingEntry ? (
         <>
           <QuickAddField
+            editable={!isSaving}
             label={isElectric ? 'Energy added (kWh)' : 'Litres'}
             placeholderTextColor="#94a3b8"
             value={formInput.liters}
@@ -177,6 +178,7 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
           />
 
           <QuickAddField
+            editable={!isSaving}
             label={energyTransactionCostLabel}
             placeholderTextColor="#94a3b8"
             value={formInput.price}
@@ -185,6 +187,7 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
           />
 
           <QuickAddField
+            editable={!isSaving}
             label="Odometer"
             placeholderTextColor="#94a3b8"
             value={formInput.odometer}
@@ -228,6 +231,7 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
           ) : null}
 
           <QuickAddField
+            editable={!isSaving}
             label="Date"
             placeholder="YYYY-MM-DD"
             placeholderTextColor="#94a3b8"
@@ -236,23 +240,26 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
           />
 
           <Pressable
+            accessibilityState={{ disabled: isSaving || activeVehicleId === null, busy: isSaving }}
             style={[styles.button, !activeVehicleId && styles.buttonDisabled]}
             accessibilityRole="button"
             accessibilityLabel={editingEntry ? 'Save fill-up changes' : 'Save fill-up'}
-            disabled={!activeVehicleId}
+            disabled={isSaving || activeVehicleId === null}
             onPress={handleSaveFuel}
           >
             <Text style={styles.buttonText}>
-              {editingEntry
-                ? `Update ${isElectric ? 'legacy charge' : entryLabel.toLowerCase()} entry`
-                : `Save ${entryLabel.toLowerCase()} entry`}
+              {isSaving
+                ? 'Saving…'
+                : editingEntry
+                  ? `Update ${isElectric ? 'legacy charge' : entryLabel.toLowerCase()} entry`
+                  : `Save ${entryLabel.toLowerCase()} entry`}
             </Text>
           </Pressable>
         </>
       ) : null}
 
       {editingEntry ? (
-        <Pressable style={styles.secondaryButton} onPress={clearEditor}>
+        <Pressable style={styles.secondaryButton} disabled={isSaving} onPress={clearEditor}>
           <Text style={styles.secondaryButtonText}>Cancel edit</Text>
         </Pressable>
       ) : null}
@@ -269,7 +276,7 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
             : 'Keep the habit simple: every new entry gives the dashboard more meaning.'}
         </Text>
 
-        {recentFuelEntries.length === 0 ? (
+        {data.status !== 'ready' ? null : recentFuelEntries.length === 0 ? (
           <Text style={styles.emptyHistory}>
             {isElectric ? 'No legacy charge entries to manage.' : getEnergyHistoryEmptyState(vehicle)}
           </Text>
@@ -289,11 +296,13 @@ export default function FuelScreen({ navigation }: FuelScreenProps) {
                 <View style={styles.historyActions}>
                   <Text style={styles.historyAmount}>{formatCurrency(entry.price)}</Text>
                   <EditEntryButton
+                    disabled={isSaving}
                     onPress={() => {
                       startEditing(entry);
                     }}
                   />
                   <DeleteEntryButton
+                    disabled={isSaving}
                     entryId={entry.id}
                     vehicleId={activeVehicleId}
                     onDelete={handleDelete}

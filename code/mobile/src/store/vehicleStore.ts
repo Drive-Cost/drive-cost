@@ -9,7 +9,7 @@ import {
   updateVehicle,
 } from '../database/vehicleRepository';
 import { removePendingVehicleUpserts } from '../database/syncRepository';
-import { persistAndQueueSync, persistAndQueueSyncBatch } from '../services/sync/offlineSync';
+import { persistAndQueueSyncBatch } from '../services/sync/offlineSync';
 import { toVehicleSyncPayload } from '../services/sync/syncPayload';
 import { requireVehicleForSync } from '../services/sync/vehicleClientId';
 import { createClientId } from '../domain/identity';
@@ -78,13 +78,13 @@ export const useVehicleStore = create<VehicleState>(set => ({
   },
 
   deleteVehicle: async vehicleId => {
-    await persistAndQueueSync(SyncEntity.Vehicle, SyncOperation.Delete, async transaction => {
+    const vehicles = await persistAndQueueSyncBatch(async (transaction, queue) => {
       const vehicle = await requireVehicleForSync(vehicleId, transaction);
       await removePendingVehicleUpserts(vehicle.clientId, transaction);
       await deleteVehicleById(vehicleId, transaction);
-      return { clientId: vehicle.clientId };
+      await queue(SyncEntity.Vehicle, SyncOperation.Delete, { clientId: vehicle.clientId });
+      return getVehicles(transaction);
     });
-    const vehicles = await getVehicles();
     set(state => ({
       vehicles,
       activeVehicleId: state.activeVehicleId === vehicleId ? (vehicles[0]?.id ?? null) : state.activeVehicleId,

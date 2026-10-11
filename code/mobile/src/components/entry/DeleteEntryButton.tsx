@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { useSubmissionGuard } from '../../hooks/useSubmissionGuard';
 import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 import { entryErrorMessage, ENTRY_DELETE_FAILURE_MESSAGE } from '../../services/entries/entryError';
 import { colors } from '../../shared/ui/tokens';
@@ -8,13 +10,16 @@ const CANCEL_BUTTON_LABEL = 'Cancel';
 const DELETE_BUTTON_LABEL = 'Delete';
 
 type DeleteEntryButtonProps = {
+  disabled?: boolean;
   entryId: number;
   vehicleId: number | null;
   onDelete: (entryId: number, vehicleId: number) => Promise<void>;
   onError: (message: string) => void;
 };
 
-export function DeleteEntryButton({ entryId, vehicleId, onDelete, onError }: DeleteEntryButtonProps) {
+export function DeleteEntryButton({ entryId, vehicleId, onDelete, onError, disabled = false }: DeleteEntryButtonProps) {
+  const submitOnce = useSubmissionGuard();
+  const [deleting, setDeleting] = useState(false);
   if (vehicleId === null) return null;
 
   const confirmDelete = () => {
@@ -24,8 +29,15 @@ export function DeleteEntryButton({ entryId, vehicleId, onDelete, onError }: Del
         text: DELETE_BUTTON_LABEL,
         style: 'destructive',
         onPress: () => {
-          void onDelete(entryId, vehicleId).catch((error: unknown) => {
-            onError(entryErrorMessage(error, ENTRY_DELETE_FAILURE_MESSAGE));
+          void submitOnce(async () => {
+            setDeleting(true);
+            try {
+              await onDelete(entryId, vehicleId);
+            } catch (error) {
+              onError(entryErrorMessage(error, ENTRY_DELETE_FAILURE_MESSAGE));
+            } finally {
+              setDeleting(false);
+            }
           });
         },
       },
@@ -33,7 +45,12 @@ export function DeleteEntryButton({ entryId, vehicleId, onDelete, onError }: Del
   };
 
   return (
-    <Pressable accessibilityRole="button" onPress={confirmDelete}>
+    <Pressable
+      disabled={disabled || deleting}
+      accessibilityState={{ disabled: disabled || deleting, busy: deleting }}
+      accessibilityRole="button"
+      onPress={confirmDelete}
+    >
       <Text style={styles.label}>{DELETE_BUTTON_LABEL}</Text>
     </Pressable>
   );

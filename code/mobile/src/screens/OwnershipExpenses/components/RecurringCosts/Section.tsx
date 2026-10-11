@@ -1,3 +1,6 @@
+import { useVehicleData } from '../../../../hooks/useVehicleData';
+import type { VehicleDataSource } from '../../../../hooks/useVehicleData';
+import { VehicleDataNotice } from '../../../../components/VehicleDataNotice';
 import { useEffect } from 'react';
 import { useEntryEditor } from '../../../../hooks/useEntryEditor/useEntryEditor';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -15,18 +18,21 @@ import { QuickAddField } from '../../../../components/entry/QuickAddField';
 
 import { reduce } from './reducer';
 import type { Input } from './reducer';
+
+const dataSources: readonly VehicleDataSource[] = ['recurring'];
 const periods = RecurringExpensePeriodMonths;
 
 export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
   const {
-    recurringExpenses,
-    loadRecurringExpenses,
+    recurringExpenses: allRecurringExpenses,
     createRecurringExpense,
     updateRecurringExpense,
     setRecurringExpenseActive,
     deleteRecurringExpense,
   } = useRecurringExpenseStore();
   const {
+    isSaving,
+    submit,
     formInput: form,
     editingEntry: editing,
     error,
@@ -38,9 +44,8 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
     clearIfEditing,
   } = useEntryEditor(emptyForm, toInput, reduce);
 
-  useEffect(() => {
-    if (vehicle.id) void loadRecurringExpenses(vehicle.id);
-  }, [loadRecurringExpenses, vehicle.id]);
+  const data = useVehicleData(vehicle.id, dataSources);
+  const recurringExpenses = allRecurringExpenses.filter(entry => entry.vehicleId === vehicle.id);
   const normalized = calculateNormalizedRecurringCost(vehicle, recurringExpenses, todayCalendarDate());
   useEffect(() => {
     cancelIfVehicleChanged(vehicle.id);
@@ -53,14 +58,11 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
     }
     const result = validateRecurringExpenseForm(form);
     if (!result.ok) return setError(result.error);
-    try {
+    await submit(async () => {
       const schedule = { ...result.value, vehicleId: vehicle.id, active: editing?.active ?? true };
       if (editing) await updateRecurringExpense({ ...editing, ...schedule });
       else await createRecurringExpense(schedule);
-      clearEditor();
-    } catch {
-      setError('Unable to save this recurring cost. Please try again.');
-    }
+    }, 'Unable to save this recurring cost. Please try again.');
   };
 
   const toggleActive = async (schedule: RecurringExpense) => {
@@ -86,7 +88,8 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
       <Text style={styles.subtitle}>
         Active commitments are normalized for planning. They are not payments or tracked transaction costs.
       </Text>
-      {normalized.monthlyEquivalent === null ? (
+      <VehicleDataNotice status={data.status} onRetry={data.retry} />
+      {data.status !== 'ready' ? null : normalized.monthlyEquivalent === null ? (
         <Text style={styles.limited}>
           Set “Started tracking on” in Edit vehicle to calculate a tracked monthly equivalent.
         </Text>
@@ -98,6 +101,7 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
       <View style={styles.grid}>
         {Object.values(ExpenseCategory).map(category => (
           <Choice
+            disabled={isSaving}
             key={category}
             selected={form.category === category}
             label={expenseCategoryLabels[category]}
@@ -106,6 +110,7 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
         ))}
       </View>
       <QuickAddField
+        editable={!isSaving}
         label="Amount per recurrence"
         placeholderTextColor="#94a3b8"
         value={form.amount}
@@ -116,6 +121,7 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
       <View style={styles.grid}>
         {periods.map(period => (
           <Choice
+            disabled={isSaving}
             key={period}
             selected={form.periodMonths === String(period)}
             label={recurrenceLabels[period]}
@@ -124,6 +130,7 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
         ))}
       </View>
       <QuickAddField
+        editable={!isSaving}
         label="Start date"
         placeholder="YYYY-MM-DD"
         placeholderTextColor="#94a3b8"
@@ -131,6 +138,7 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
         onChangeText={value => update('startDate', value)}
       />
       <QuickAddField
+        editable={!isSaving}
         label="Next due date"
         optional
         placeholder="YYYY-MM-DD"
@@ -139,6 +147,7 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
         onChangeText={value => update('nextDueDate', value)}
       />
       <QuickAddField
+        editable={!isSaving}
         label="Description"
         optional
         placeholderTextColor="#94a3b8"
@@ -146,20 +155,24 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
         onChangeText={value => update('description', value)}
       />
       <Pressable
+        disabled={isSaving}
+        accessibilityState={{ disabled: isSaving, busy: isSaving }}
         style={styles.button}
         onPress={() => {
           void save();
         }}
       >
-        <Text style={styles.buttonText}>{editing ? 'Update recurring cost' : 'Save recurring cost'}</Text>
+        <Text style={styles.buttonText}>
+          {isSaving ? 'Saving…' : editing ? 'Update recurring cost' : 'Save recurring cost'}
+        </Text>
       </Pressable>
       {editing ? (
-        <Pressable style={styles.cancel} onPress={clearEditor}>
+        <Pressable style={styles.cancel} disabled={isSaving} onPress={clearEditor}>
           <Text style={styles.cancelText}>Cancel edit</Text>
         </Pressable>
       ) : null}
       <View style={styles.list}>
-        {recurringExpenses.length === 0 ? (
+        {data.status !== 'ready' ? null : recurringExpenses.length === 0 ? (
           <Text style={styles.empty}>No recurring costs yet.</Text>
         ) : (
           recurringExpenses.map(schedule => {
@@ -181,10 +194,11 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
                   </Text>
                 </View>
                 <View style={styles.actions}>
-                  <Pressable onPress={() => startEditing(schedule)}>
+                  <Pressable disabled={isSaving} onPress={() => startEditing(schedule)}>
                     <Text style={styles.edit}>Edit</Text>
                   </Pressable>
                   <Pressable
+                    disabled={isSaving}
                     onPress={() => {
                       void toggleActive(schedule);
                     }}
@@ -192,6 +206,7 @@ export function RecurringCostsSection({ vehicle }: { vehicle: Vehicle }) {
                     <Text style={styles.toggle}>{schedule.active ? 'Deactivate' : 'Reactivate'}</Text>
                   </Pressable>
                   <Pressable
+                    disabled={isSaving}
                     onPress={() => {
                       void removeSchedule(schedule);
                     }}
@@ -219,9 +234,19 @@ function toInput(schedule: RecurringExpense): Input {
   };
 }
 
-function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+function Choice({
+  label,
+  selected,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  disabled: boolean;
+}) {
   return (
-    <Pressable style={[styles.choice, selected && styles.choiceSelected]} onPress={onPress}>
+    <Pressable disabled={disabled} style={[styles.choice, selected && styles.choiceSelected]} onPress={onPress}>
       <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{label}</Text>
     </Pressable>
   );

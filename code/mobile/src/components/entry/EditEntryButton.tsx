@@ -4,12 +4,13 @@ import { colors } from '../../shared/ui/tokens';
 const EDIT_BUTTON_LABEL = 'Edit';
 
 type EditEntryButtonProps = {
+  disabled?: boolean;
   onPress: () => void;
 };
 
-export function EditEntryButton({ onPress }: EditEntryButtonProps) {
+export function EditEntryButton({ onPress, disabled = false }: EditEntryButtonProps) {
   return (
-    <Pressable accessibilityRole="button" onPress={onPress}>
+    <Pressable disabled={disabled} accessibilityState={{ disabled }} accessibilityRole="button" onPress={onPress}>
       <Text style={styles.label}>{EDIT_BUTTON_LABEL}</Text>
     </Pressable>
   );

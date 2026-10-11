@@ -1,3 +1,6 @@
+import { useVehicleData } from '../../hooks/useVehicleData';
+import type { VehicleDataSource } from '../../hooks/useVehicleData';
+import { VehicleDataNotice } from '../../components/VehicleDataNotice';
 import { useEffect, useReducer } from 'react';
 import { reduce, initialState } from './reducer';
 import type { Input } from './reducer';
@@ -16,13 +19,15 @@ import { QuickAddVehicleContext } from '../../components/entry/QuickAddVehicleCo
 import { RootStackParamList } from '../../navigation/types';
 import { completeQuickAdd } from '../../navigation/completeQuickAdd';
 
+const dataSources: readonly VehicleDataSource[] = ['charging'];
+
 const emptyInput = (): Input => ({ date: todayCalendarDate(), kWh: '', price: '', odometer: '' });
 
 type ChargingScreenProps = NativeStackScreenProps<RootStackParamList, 'ChargingEntry'>;
 
 export default function ChargingScreen({ navigation }: ChargingScreenProps) {
   const { vehicles, activeVehicleId } = useVehicleStore();
-  const { chargingEntries, loadChargingEntries, createChargingEntry, deleteChargingEntry } = useChargingStore();
+  const { chargingEntries, createChargingEntry, deleteChargingEntry } = useChargingStore();
   const [state, dispatch] = useReducer(reduce, undefined, () => initialState(emptyInput()));
   const { form } = state;
   const error = state.tag === 'editing' ? state.error : null;
@@ -32,9 +37,7 @@ export default function ChargingScreen({ navigation }: ChargingScreenProps) {
   const vehicle = vehicles.find(item => item.id === activeVehicleId);
   const activeChargingEntries = chargingEntries.filter(entry => entry.vehicleId === activeVehicleId);
 
-  useEffect(() => {
-    if (activeVehicleId) void loadChargingEntries(activeVehicleId);
-  }, [activeVehicleId, loadChargingEntries]);
+  const data = useVehicleData(activeVehicleId, dataSources);
 
   useEffect(() => {
     if (vehicle && !form.odometer)
@@ -87,6 +90,7 @@ export default function ChargingScreen({ navigation }: ChargingScreenProps) {
       <Text style={styles.title}>Add charge</Text>
       <Text style={styles.copy}>Record a charging session for your active vehicle.</Text>
       <QuickAddVehicleContext vehicle={vehicle} />
+      <VehicleDataNotice status={data.status} onRetry={data.retry} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <QuickAddField
         editable={!isSaving}
@@ -137,6 +141,7 @@ export default function ChargingScreen({ navigation }: ChargingScreenProps) {
             <Text>{entry.odometer.toLocaleString()} km</Text>
           </View>
           <DeleteEntryButton
+            disabled={isSaving}
             entryId={entry.id}
             vehicleId={activeVehicleId}
             onDelete={deleteChargingEntry}

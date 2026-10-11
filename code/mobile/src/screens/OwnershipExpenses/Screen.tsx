@@ -1,3 +1,6 @@
+import { useVehicleData } from '../../hooks/useVehicleData';
+import type { VehicleDataSource } from '../../hooks/useVehicleData';
+import { VehicleDataNotice } from '../../components/VehicleDataNotice';
 import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { DeleteEntryButton } from '../../components/entry/DeleteEntryButton';
@@ -5,7 +8,6 @@ import { EditEntryButton } from '../../components/entry/EditEntryButton';
 import { reduce } from './reducer';
 import type { Input } from './reducer';
 import { useEntryEditor } from '../../hooks/useEntryEditor/useEntryEditor';
-import { entryErrorMessage, ENTRY_SAVE_FAILURE_MESSAGE } from '../../services/entries/entryError';
 import { validateExpenseEntryForm } from '../../domain/formValidation';
 import { ENTRY_DATE_PLACEHOLDER, toCalendarDate, todayCalendarDate } from '../../domain/entryDate';
 import { ExpenseCategory, ExpenseEntry } from '../../models/ExpenseEntry';
@@ -16,15 +18,18 @@ import { useVehicleStore } from '../../store/vehicleStore';
 import { RecurringCostsSection } from './components/RecurringCosts/Section';
 import { QuickAddField } from '../../components/entry/QuickAddField';
 
+const dataSources: readonly VehicleDataSource[] = ['expenses'];
+
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export default function OwnershipExpensesScreen() {
   const { vehicles, activeVehicleId } = useVehicleStore();
-  const { expenseEntries, loadExpenseEntries, createExpenseEntry, updateExpenseEntry, deleteExpenseEntry } =
-    useExpenseStore();
+  const { expenseEntries, createExpenseEntry, updateExpenseEntry, deleteExpenseEntry } = useExpenseStore();
   const {
+    isSaving,
+    submit,
     formInput,
     error,
     setError,
@@ -38,9 +43,7 @@ export default function OwnershipExpensesScreen() {
 
   const vehicle = vehicles.find(item => item.id === activeVehicleId);
 
-  useEffect(() => {
-    if (activeVehicleId) void loadExpenseEntries(activeVehicleId);
-  }, [activeVehicleId, loadExpenseEntries]);
+  const data = useVehicleData(activeVehicleId, dataSources);
 
   useEffect(() => {
     cancelIfVehicleChanged(activeVehicleId);
@@ -60,17 +63,14 @@ export default function OwnershipExpensesScreen() {
       return;
     }
 
-    try {
+    await submit(async () => {
       const entry = { ...result.value, vehicleId: activeVehicleId };
       if (editingEntry) {
         await updateExpenseEntry({ ...editingEntry, ...entry });
       } else {
         await createExpenseEntry(entry);
       }
-      clearEditor();
-    } catch (caught) {
-      setError(entryErrorMessage(caught, ENTRY_SAVE_FAILURE_MESSAGE));
-    }
+    });
   };
 
   const handleDelete = async (entryId: number, vehicleId: number) => {
@@ -78,7 +78,9 @@ export default function OwnershipExpensesScreen() {
     clearIfEditing(entryId);
   };
 
-  const recentExpenses = [...expenseEntries].sort((left, right) => right.date.localeCompare(left.date));
+  const recentExpenses = [...expenseEntries.filter(entry => entry.vehicleId === activeVehicleId)].sort((left, right) =>
+    right.date.localeCompare(left.date)
+  );
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -89,6 +91,7 @@ export default function OwnershipExpensesScreen() {
       </Text>
 
       {vehicle ? <Text style={styles.vehicleName}>{vehicle.label || `${vehicle.brand} ${vehicle.model}`}</Text> : null}
+      <VehicleDataNotice status={data.status} onRetry={data.retry} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Text style={styles.paymentTitle}>Payments / expenses</Text>
@@ -111,6 +114,7 @@ export default function OwnershipExpensesScreen() {
       </View>
 
       <QuickAddField
+        editable={!isSaving}
         label="Date"
         placeholder={ENTRY_DATE_PLACEHOLDER}
         placeholderTextColor="#94a3b8"
@@ -118,6 +122,7 @@ export default function OwnershipExpensesScreen() {
         onChangeText={value => updateFormInput('date', value)}
       />
       <QuickAddField
+        editable={!isSaving}
         label="Total paid"
         placeholderTextColor="#94a3b8"
         value={formInput.totalPaid}
@@ -125,6 +130,7 @@ export default function OwnershipExpensesScreen() {
         onChangeText={value => updateFormInput('totalPaid', value)}
       />
       <QuickAddField
+        editable={!isSaving}
         label="Odometer"
         optional
         placeholderTextColor="#94a3b8"
@@ -133,6 +139,7 @@ export default function OwnershipExpensesScreen() {
         onChangeText={value => updateFormInput('odometer', value)}
       />
       <QuickAddField
+        editable={!isSaving}
         label="Description"
         optional
         placeholderTextColor="#94a3b8"
@@ -141,14 +148,17 @@ export default function OwnershipExpensesScreen() {
       />
 
       <Pressable
+        accessibilityState={{ disabled: isSaving || activeVehicleId === null, busy: isSaving }}
         style={[styles.button, !activeVehicleId && styles.buttonDisabled]}
-        disabled={!activeVehicleId}
+        disabled={isSaving || activeVehicleId === null}
         onPress={handleSave}
       >
-        <Text style={styles.buttonText}>{editingEntry ? 'Update ownership expense' : 'Save ownership expense'}</Text>
+        <Text style={styles.buttonText}>
+          {isSaving ? 'Saving…' : editingEntry ? 'Update ownership expense' : 'Save ownership expense'}
+        </Text>
       </Pressable>
       {editingEntry ? (
-        <Pressable style={styles.secondaryButton} onPress={clearEditor}>
+        <Pressable style={styles.secondaryButton} disabled={isSaving} onPress={clearEditor}>
           <Text style={styles.secondaryButtonText}>Cancel edit</Text>
         </Pressable>
       ) : null}
@@ -158,7 +168,7 @@ export default function OwnershipExpensesScreen() {
 
       <View style={styles.historyCard}>
         <Text style={styles.historyTitle}>Payment history</Text>
-        {recentExpenses.length === 0 ? (
+        {data.status !== 'ready' ? null : recentExpenses.length === 0 ? (
           <Text style={styles.emptyHistory}>No ownership expenses yet.</Text>
         ) : (
           recentExpenses.map(entry => (
@@ -175,11 +185,13 @@ export default function OwnershipExpensesScreen() {
               <View style={styles.historyActions}>
                 <Text style={styles.historyAmount}>{formatCurrency(entry.totalPaid)}</Text>
                 <EditEntryButton
+                  disabled={isSaving}
                   onPress={() => {
                     startEditing(entry);
                   }}
                 />
                 <DeleteEntryButton
+                  disabled={isSaving}
                   entryId={entry.id}
                   vehicleId={activeVehicleId}
                   onDelete={handleDelete}

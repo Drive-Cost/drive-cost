@@ -6,7 +6,6 @@ const mocks = vi.hoisted(() => ({
   getVehicles: vi.fn(),
   removePendingVehicleUpserts: vi.fn(),
   requireVehicleForSync: vi.fn(),
-  persistAndQueueSync: vi.fn(),
   persistAndQueueSyncBatch: vi.fn(),
   queue: vi.fn(),
   toVehicleSyncPayload: vi.fn(),
@@ -24,7 +23,6 @@ vi.mock('../../src/database/syncRepository', () => ({
   removePendingVehicleUpserts: mocks.removePendingVehicleUpserts,
 }));
 vi.mock('../../src/services/sync/offlineSync', () => ({
-  persistAndQueueSync: mocks.persistAndQueueSync,
   persistAndQueueSyncBatch: mocks.persistAndQueueSyncBatch,
 }));
 vi.mock('../../src/services/sync/syncPayload', () => ({ toVehicleSyncPayload: mocks.toVehicleSyncPayload }));
@@ -49,7 +47,6 @@ describe('vehicle creation', () => {
     vi.clearAllMocks();
     useVehicleStore.setState({ vehicles: [], activeVehicleId: null });
     mocks.createClientId.mockReturnValue('vehicle-client-42');
-    mocks.persistAndQueueSync.mockImplementation(async (_entity, _operation, persist) => persist({}));
     mocks.persistAndQueueSyncBatch.mockImplementation(async persist => persist({}, mocks.queue));
     mocks.addVehicle.mockResolvedValue({ id: 42, clientId: 'vehicle-client-42', ...newVehicle });
     mocks.toVehicleSyncPayload.mockImplementation(vehicle => vehicle);
@@ -119,7 +116,8 @@ describe('vehicle creation', () => {
 
     expect(mocks.removePendingVehicleUpserts).toHaveBeenCalledWith('vehicle-a', {});
     expect(mocks.deleteVehicleById).toHaveBeenCalledWith(1, {});
-    expect(mocks.persistAndQueueSync).toHaveBeenCalledWith('vehicle', 'delete', expect.any(Function));
+    expect(mocks.queue).toHaveBeenCalledWith('vehicle', 'delete', { clientId: 'vehicle-a' });
+    expect(mocks.getVehicles).toHaveBeenCalledWith({});
     expect(useVehicleStore.getState()).toMatchObject({ vehicles: [], activeVehicleId: null });
   });
 });
