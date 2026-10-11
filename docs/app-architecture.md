@@ -177,6 +177,31 @@ Create/update use cases return the committed record. Calculations that need
 only amounts accept those fields without requiring invented persistence IDs.
 Entity ID branding remains a separate decision based on concrete mix-up risks.
 
+### Loading and account consistency
+
+Entry stores retain per-vehicle snapshots rather than replacing one shared
+list with the latest vehicle's results. `store/vehicleEntryLoader.ts` guards
+completion with a generation per vehicle; committed snapshots invalidate older
+reads. Typed loading/ready/error states distinguish empty data from failed
+reads. `hooks/useVehicleData.ts` coordinates the requested entry sources and
+retry, while shared UI renders product-oriented load notices. Home and History
+wait for complete records before presenting totals or empty states.
+
+Deletion reads its resulting snapshot inside the same transaction as removal
+and the tombstone. The common entry editor owns saving/recovery transitions,
+and a synchronous guard prevents repeat taps before React renders disabled UI.
+Submission generations prevent a previous vehicle's completion from resetting
+a new editor.
+
+`store/accountStore.ts` exposes only non-secret identity and session status.
+Credentials remain private to the session service and SecureStore. Settings
+subscribes to that projection and reloads the owner on focus/account changes.
+Guest upgrades retain the owner ID and atomically update its mode before
+publishing the registered session. Transient refresh failures preserve
+credentials; only an explicit refresh rejection invalidates them. Secure writes
+serialize, and a rotated secret whose storage fails is retained in memory for
+storage retry. Account switching and dataset adoption remain out of scope.
+
 ### Development tooling
 
 TypeScript `^7.0.2` is the compiler for mobile, contracts, and backend. Mobile

@@ -27,6 +27,11 @@ Status: complete.
   saves without awaiting sync, coalesce sync wake-ups, and separate creation
   inputs from identity-validated persisted records.
 
+- [x] Preserve sessions through transient refresh failures, keep owner/account
+  views consistent after guest upgrade, guard repeated entry submissions,
+  commit deletion snapshots atomically, and protect vehicle caches from stale
+  read completion with recoverable load states.
+
 ## Phase 2: Honest Local Product
 
 Status: in progress.

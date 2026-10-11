@@ -136,23 +136,49 @@ Reducers do not call the database or clock. Date defaults and model conversion
 remain outside transitions. SQLite schemas, stable sync identities, metrics,
 and route names have not changed.
 
-## Findings to discuss next
+## Completed consistency follow-up
 
-These are concrete remaining findings, not changes silently included in the
-organization work. Backend review is deferred to the next pass.
+The five agreed correctness findings are addressed:
 
-| Priority | Evidence and consequence | Proposed next step |
-| --- | --- | --- |
-| High | `services/sync/authSession.ts`: refresh clears stored credentials for any failure, including temporary connectivity problems. | Separate rejected credentials from transient failures; test offline refresh recovery. |
-| Medium | Fuel, maintenance, ownership-expense, and recurring editors still permit repeated save taps. New saving states cover the other forms, not these existing editor flows. | Extend the editor lifecycle and guard saves; test editing, failure, and successful reset together. |
-| Medium | Guest upgrades persist the registered session without updating the existing owner's mode. Settings gives the stored guest mode precedence and loads its owner only on mount, so it can continue offering account creation after a successful upgrade. | Update owner mode after verifying the same user identity, and subscribe to a typed account projection or refresh on focus; test returning from signup and sign-in. |
-| Medium | Session persistence and rotation omit email from immediate in-memory state even when SecureStore or the API contains it. | Preserve optional email through persistence, rotation, and restoration with lifecycle tests. |
-| Medium | Store load effects launch promises without recovery, and one shared per-entity array is overwritten by vehicle-specific loads. Overlapping loads can replace newer data or leave the UI unaware of SQLite failure. | Add recoverable load states and guard completion by requested vehicle; test out-of-order responses. |
-| Medium | Entry deletion commits its mutation and outbox job before reloading the store. A failed reload can report a failed delete even though the record is already gone. | Include the resulting snapshot in the transaction, as creation and update now do; test reload failure and retry behavior. |
-| Low | `code/mobile/store/vehicleStore.ts` is an unused in-memory prototype beside the SQLite-backed source store. `CostSummaryCards.tsx` also has no current consumer. | Remove obsolete prototype/dead UI after confirming their intended retirement. |
+- Refresh rejects credentials only on an explicit refresh-endpoint 401. Network,
+  timeout, malformed-response, and server errors retain the session and remain
+  retryable. Sync no longer clears a refresh credential based on an access-token
+  rejection. Secure writes serialize; rotated credentials retry storage before
+  another rotation, and old refresh results cannot replace a later sign-in.
+- Fuel, maintenance, payments, and recurring editors share a typed saving
+  lifecycle and a synchronous submission guard. Pending input stays fixed;
+  errors restore the same edit, and vehicle changes invalidate old completions.
+  Shared delete actions also guard concurrent submissions.
+- All entry deletions and vehicle deletion include their resulting snapshots
+  in the mutation/outbox transaction. A failed read rolls back the deletion,
+  and successful local completion does not await sync.
+- Entry caches retain vehicle ownership, guard reads by request generation, and
+  invalidate older reads after writes. Loading, error, and successfully empty
+  results are distinct. Home and History do not show incomplete records as
+  empty or zero-cost results. Other entry screens provide a retry notice.
+  Remote pulls refresh all five active-vehicle entry caches.
+- Guest upgrades verify and preserve the owner ID, atomically update its mode,
+  and publish a credential-free account projection. Settings reloads on focus
+  and account changes, with stale-read protection. Email survives persistence,
+  restoration, and refresh. A matching registered session repairs a legacy
+  guest-mode binding on initialization.
 
-The agreed atomic-save, local-completion, and record-contract changes are now
-implemented below. The remaining findings in the table are separate follow-ups.
+These changes use the same boundary-validation, explicit-state, and transaction
+patterns discussed above. No schema, cost metric, sync identity, or dependency
+changed. Account switching and dataset merging remain separate product work.
+
+A rotated refresh secret cannot be made durable when secure storage itself is
+unavailable. The replacement stays recoverable in memory while the app runs;
+closing the app before storage succeeds can still require signing in again.
+
+## Remaining follow-ups
+
+- Exercise the offline/restart/account-upgrade journey on a device, then the
+  existing two-device sync and migration release checks.
+- Account recovery and email verification remain release-readiness work in the
+  development roadmap, beyond this mobile consistency pass.
+- The unused `code/mobile/store/vehicleStore.ts` prototype and
+  `CostSummaryCards.tsx` can be removed after confirming their retirement.
 
 ## Completed save and record-contract follow-up
 
@@ -220,7 +246,7 @@ for TypeScript 7's programmatic API.
 
 ## Verification and limits
 
-Mobile type-aware lint, type checking, style checking, and 238 tests across 48 test files passed under TypeScript 7.0.2. Added
+Mobile type-aware lint, type checking, style checking, and 277 tests across 53 test files passed under TypeScript 7.0.2. Added
 coverage checks local reducer submission/recovery, account-load states, branded
 time types, retry scheduling, DTO output types, malformed pull responses, and
 empty mutation acknowledgements. Existing domain, repository, migration, and

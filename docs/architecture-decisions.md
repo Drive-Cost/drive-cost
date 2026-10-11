@@ -149,4 +149,7 @@ not await cloud sync; it schedules an idempotent, serial, coalescing sync pass.
 Requests made during an active pass cause a follow-up, while failures preserve
 the outbox and recoverable status until retry. Persisted records require both
 identities; creation and update inputs express different identity permissions.
+Entry and vehicle deletion also read their resulting snapshots before commit,
+so reload failure cannot report a committed deletion as failed. Vehicle-scoped
+cache generations keep older reads from overwriting these committed snapshots.
 No persisted data format or client identity changes accompany this boundary.
