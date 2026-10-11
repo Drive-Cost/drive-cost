@@ -39,7 +39,7 @@ Read these documents before implementing product work:
 - Repositories own SQLite access.
 - Domain calculations and validation must be deterministic and UI-independent.
 - React Navigation remains in place unless a product requirement justifies changing it.
-- When touching a feature, prefer gradual movement toward the feature-slice structure described in `docs/app-architecture.md`; do not perform broad mechanical reorganizations.
+- Organize mobile UI under `screens/<Screen>/` with `Screen.tsx`, local `reducer.ts` exports named `State`, `Action`, and `reduce`, and screen-specific components beside their screen. Keep shared UI in `components/` and reusable hooks in `hooks/`, following `docs/app-architecture.md`.
 
 ### Sync
 
@@ -70,6 +70,9 @@ Read these documents before implementing product work:
 - Do not perform unrelated refactors in a feature task.
 - Do not introduce a dependency unless the task has a concrete need that cannot be met cleanly with the existing stack.
 - Prefer clear duplication to premature abstraction when domain semantics differ.
+- Prefer TypeScript `type` aliases over `interface` declarations in mobile code.
+- Public service functions return concrete validated DTOs; raw JSON and caught errors are checked at the boundary before becoming typed data.
+- Use checked constructors for branded units or identities; do not assert unvalidated input into a brand.
 - Keep business calculations out of React components.
 - Keep persistence details out of domain calculations.
 - New domain behavior requires tests.

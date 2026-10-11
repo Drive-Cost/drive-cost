@@ -35,13 +35,17 @@ The backend's JSON file adapter is useful for local wiring, but it is not a
 multi-user datastore. Production requires Postgres, migrations, transaction
 boundaries, user-scoped queries, and automated backup.
 
-## ADR-006: Feature Slices On Mobile, Modular Layers On The Backend
+## ADR-006: Screen Modules On Mobile, Modular Layers On The Backend
 
-Mobile code will gradually move from global technical folders to feature slices
-as it changes. React Navigation stays in place because file-based routing does
-not currently solve a product problem. The backend uses modules with HTTP,
-service, and repository boundaries; this preserves the useful separation seen
-in Gomoku-Web without copying its larger structure before DriveCost needs it.
+Updated 11 October 2026 following the chosen mobile organization convention.
+Mobile UI uses `screens/<Screen>/Screen.tsx`, a local `reducer.ts`, and colocated
+screen-specific components. Root `components/` contains reusable UI; root
+`hooks/` contains reusable hooks. Pure rules, use cases, stores, and persistence
+keep their existing boundaries. This replaces the earlier partial feature-slice
+layout rather than maintaining competing folder conventions.
+
+React Navigation stays in place. Backend modules keep HTTP, service, and
+repository boundaries. Backend restructuring remains a separate follow-up.
 
 ## ADR-007: Device Tokens Live In Secure Storage, Not SQLite
 
@@ -134,3 +138,15 @@ account-specific. Existing access-token-only installations are treated
 conservatively: when their token exposes an unambiguous legacy user identity,
 the app preserves that owner binding but requires reauthentication. It never
 creates a replacement guest or guesses ownership from business rows.
+
+## ADR-013: Local Event Saves Complete At The Atomic SQLite Commit
+
+Fuel, charging, and maintenance event writes and their monotonic vehicle
+odometer updates share a transaction with both outbox jobs. Parent mutations
+are queued before owned entries. Store snapshots are read before commit, so
+snapshot failure also rolls back the event and jobs. Local save completion does
+not await cloud sync; it schedules an idempotent, serial, coalescing sync pass.
+Requests made during an active pass cause a follow-up, while failures preserve
+the outbox and recoverable status until retry. Persisted records require both
+identities; creation and update inputs express different identity permissions.
+No persisted data format or client identity changes accompany this boundary.

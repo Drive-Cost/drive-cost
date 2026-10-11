@@ -22,6 +22,10 @@ Status: complete.
 - [x] Add CI to run type checks and tests on every pull request.
 - [x] Add deterministic sync retry policy tests without requiring Expo runtime.
 - [x] Commit a local write and its outbox job in one SQLite transaction.
+- [x] Commit recorded energy/maintenance events, their monotonic vehicle
+  odometer update, outbox jobs, and store snapshots together. Complete local
+  saves without awaiting sync, coalesce sync wake-ups, and separate creation
+  inputs from identity-validated persisted records.
 
 ## Phase 2: Honest Local Product
 
