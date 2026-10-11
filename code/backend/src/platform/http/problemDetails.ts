@@ -38,6 +38,7 @@ const problemDefinitionByCode = {
         title: 'Vehicle not found',
         type: 'https://drivecost.app/problems/vehicle-not-found',
     },
+    adoptionConflict: { status: 409, title: 'Device records conflict with account data', type: 'https://drivecost.app/problems/adoption-conflict' },
     invalidMileageBaseline: {
         status: 422,
         title: 'Invalid mileage baseline',
@@ -58,6 +59,7 @@ export const Problems = {
     rateLimited: (detail?: string) => problem('rateLimited', detail),
     emailAlreadyRegistered: (detail?: string) => problem('emailAlreadyRegistered', detail),
     vehicleNotFound: (id?: string) => problem('vehicleNotFound', id ? `Vehicle ${id} not found` : undefined),
+    adoptionConflict: () => problem('adoptionConflict', 'Some device records cannot be added safely. Your device data is preserved.'),
     invalidMileageBaseline: (detail?: string) => problem('invalidMileageBaseline', detail),
     internalError: (detail?: string) => problem('internalError', detail),
 } as const;

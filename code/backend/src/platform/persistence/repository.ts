@@ -27,7 +27,7 @@ export interface DriveCostRepository {
     listEntities(userId: string, entityType: SyncEntityType): Promise<SyncedRecord[]>;
     entityExists(userId: string, entityType: SyncEntityType, clientId: string): Promise<boolean>;
     entityIsDeleted(userId: string, entityType: SyncEntityType, clientId: string): Promise<boolean>;
-    upsertEntity(userId: string, entityType: SyncEntityType, payload: object): Promise<SyncedRecord | null>;
+    upsertEntity(userId: string, entityType: SyncEntityType, payload: object, createOnly?: boolean): Promise<SyncedRecord | null>;
     deleteEntity(userId: string, entityType: Exclude<SyncEntityType, 'vehicle'>, clientId: string): Promise<void>;
     deleteVehicle(userId: string, clientId: string): Promise<void>;
     listChanges(userId: string, after: number, limit: number): Promise<SyncChange[]>;

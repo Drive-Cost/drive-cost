@@ -1,4 +1,5 @@
 export {
+  AdoptionProtocol,
   SyncEntity,
   FuelFillStatus,
   ExpenseCategory,

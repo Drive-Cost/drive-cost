@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+import { Problems } from '../http/problemDetails';
 import crypto from 'node:crypto';
 import { ensureDatabase, readDatabase, upsertByClientId, writeDatabase } from '../../lib/fileDatabase';
 import { SyncEntity, SyncOperation } from '@drivecost/contracts';
@@ -128,12 +130,19 @@ export class FileRepository implements DriveCostRepository {
         );
     }
 
-    async upsertEntity(userId: string, entityType: SyncEntityType, payload: object): Promise<SyncedRecord | null> {
+    async upsertEntity(userId: string, entityType: SyncEntityType, payload: object, createOnly = false): Promise<SyncedRecord | null> {
         const database = readDatabase();
         const collection = this.collection(database, entityType);
         const { clientId: _clientId, ...attributes } = payload as Record<string, unknown>;
         const clientId = requiredClientId(payload);
         const existingRecord = collection.find((record) => record.userId === userId && record.clientId === clientId);
+        if (createOnly && existingRecord) {
+            const { id: _id, userId: _owner, clientId: _identity, createdAt: _createdAt, updatedAt: _updatedAt, deletedAt, ...existingAttributes } = existingRecord;
+            if (deletedAt || !isDeepStrictEqual(JSON.parse(JSON.stringify(attributes)), existingAttributes)) {
+                throw Problems.adoptionConflict();
+            }
+            return existingRecord;
+        }
         if (existingRecord?.deletedAt) {
             return null;
         }

@@ -1,3 +1,4 @@
+import { AdoptionProtocol } from '@drivecost/contracts';
 import { FastifyInstance } from 'fastify';
 import { DriveCostRepository } from '../../platform/persistence/repository';
 
@@ -24,10 +25,11 @@ export async function registerSyncRoutes(app: FastifyInstance, repository: Drive
     app.get<{ Querystring: SyncQuery }>(
         '/sync',
         { onRequest: [app.authenticate], schema: { querystring: syncQuerySchema } },
-        async (request) => {
+        async (request, reply) => {
             const after = request.query.after ?? INITIAL_CURSOR;
             const limit = request.query.limit ?? DEFAULT_PAGE_SIZE;
             const changes = await repository.listChanges(request.user.sub, after, limit);
+            reply.header(AdoptionProtocol.header, AdoptionProtocol.version);
             return { data: changes, nextCursor: changes.at(-1)?.sequence ?? after };
         },
     );

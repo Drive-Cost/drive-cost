@@ -11,14 +11,16 @@ type VehicleRepository = Pick<
 export function createVehicleService(repository: VehicleRepository) {
     return {
         list: (userId: string) => repository.listEntities(userId, SyncEntity.Vehicle),
-        upsert: (userId: string, input: VehicleSyncPayload) => {
+        upsert: (userId: string, input: VehicleSyncPayload, createOnly = false) => {
             if (
                 input.trackingStartMileage < input.ownershipStartMileage ||
                 input.currentOdometer < input.trackingStartMileage
             ) {
                 throw Problems.invalidMileageBaseline();
             }
-            return repository.upsertEntity(userId, SyncEntity.Vehicle, input);
+            return createOnly
+                ? repository.upsertEntity(userId, SyncEntity.Vehicle, input, true)
+                : repository.upsertEntity(userId, SyncEntity.Vehicle, input);
         },
         delete: (userId: string, clientId: string) => repository.deleteVehicle(userId, clientId),
         availability: async (userId: string, clientId: string): Promise<'active' | 'deleted' | 'missing'> => {

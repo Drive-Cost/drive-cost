@@ -1,3 +1,5 @@
+import { AdoptionProtocol } from '@drivecost/contracts';
+import { requestsAdoption } from '../../platform/http/adoption';
 import { FastifyInstance } from 'fastify';
 import { SyncEntity } from '@drivecost/contracts';
 import { toPublicRecord } from '../../platform/persistence/repository';
@@ -56,11 +58,11 @@ function registerEntryUpsertRoute(
     entityType: EntryEntityType,
     schema: object,
 ) {
-    app.post<{ Body: SyncPayloadByEntity[EntryEntityType] }>(
-        route,
+    for (const adoptionOnly of [false, true]) app.post<{ Body: SyncPayloadByEntity[EntryEntityType] }>(
+        adoptionOnly ? `${route}${AdoptionProtocol.pathSuffix}` : route,
         { onRequest: [app.authenticate], schema: { body: schema } },
         async (request, reply) => {
-            const record = await service.upsert(request.user.sub, entityType, request.body);
+            const record = await service.upsert(request.user.sub, entityType, request.body, adoptionOnly || requestsAdoption(request.headers));
             if (!record) return reply.code(HttpStatus.NO_CONTENT).send();
 
             reply.code(HttpStatus.CREATED);

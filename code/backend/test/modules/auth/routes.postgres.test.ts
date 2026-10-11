@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import postgres from 'postgres';
-import { SyncEntity } from '@drivecost/contracts';
+import { AdoptionProtocol, SyncEntity } from '@drivecost/contracts';
 import { createApp } from '../../../src/app';
 import { PostgresRepository } from '../../../src/platform/persistence/postgresRepository';
 
@@ -517,3 +517,32 @@ interface SessionBody {
     refreshToken: string;
     user: { id: string; mode: 'guest' | 'registered' };
 }
+
+
+test('Postgres adoption is collision safe under concurrent creation, replay and tombstones', { skip: !databaseUrl }, async () => {
+    const app = await createPostgresApp();
+    try {
+        const headers = authorizationHeaders(await registerUser(app, 'adoption'));
+        const guarded = { ...headers, [AdoptionProtocol.header]: AdoptionProtocol.version };
+        const vehicle = vehiclePayload(`adopt-${randomUUID()}`);
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles/adoption', headers: guarded, payload: vehicle })).statusCode, 201);
+        const before = (await app.inject({ method: 'GET', url: '/sync?after=0', headers })).json();
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles/adoption', headers: guarded, payload: vehicle })).statusCode, 201);
+        assert.deepEqual((await app.inject({ method: 'GET', url: '/sync?after=0', headers })).json(), before);
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles/adoption', headers: guarded, payload: { ...vehicle, model: 'Unrelated car' } })).statusCode, 409);
+        const racing = { ...vehicle, clientId: `racing-${randomUUID()}` };
+        const race = await Promise.all([
+            app.inject({ method: 'POST', url: '/vehicles/adoption', headers: guarded, payload: racing }),
+            app.inject({ method: 'POST', url: '/vehicles/adoption', headers: guarded, payload: { ...racing, model: 'Other car' } }),
+        ]);
+        assert.deepEqual(race.map(response => response.statusCode).sort(), [201, 409]);
+        for (const child of childRequests(vehicle.clientId, `adopt-${randomUUID()}`)) {
+            assert.equal((await app.inject({ method: 'POST', url: `${child.route}/adoption`, headers: guarded, payload: child.payload })).statusCode, 201);
+            assert.equal((await app.inject({ method: 'POST', url: `${child.route}/adoption`, headers: guarded, payload: child.payload })).statusCode, 201);
+        }
+        assert.equal((await app.inject({ method: 'DELETE', url: `/vehicles/${vehicle.clientId}`, headers })).statusCode, 204);
+        assert.equal((await app.inject({ method: 'POST', url: '/vehicles/adoption', headers: guarded, payload: vehicle })).statusCode, 409);
+        const records = (await app.inject({ method: 'GET', url: '/vehicles', headers })).json().data;
+        assert.equal(records.filter((record: { clientId: string }) => record.clientId === racing.clientId).length, 1);
+    } finally { await app.close(); }
+});

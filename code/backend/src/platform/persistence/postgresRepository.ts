@@ -1,3 +1,4 @@
+import { Problems } from '../http/problemDetails';
 import postgres, { Sql, TransactionSql } from 'postgres';
 import { createId } from '../../lib/ids';
 import { AuthSessionRecord, SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
@@ -163,7 +164,7 @@ export class PostgresRepository implements DriveCostRepository {
         return row?.exists ?? false;
     }
 
-    async upsertEntity(userId: string, entityType: SyncEntityType, payload: object): Promise<SyncedRecord | null> {
+    async upsertEntity(userId: string, entityType: SyncEntityType, payload: object, createOnly = false): Promise<SyncedRecord | null> {
         const { clientId, attributes } = splitPayload(payload);
         return this.sql.begin(async (transaction) => {
             if (entityType !== 'vehicle') {
@@ -177,7 +178,35 @@ export class PostgresRepository implements DriveCostRepository {
                     AND deleted_at IS NULL
                   FOR UPDATE
                 `;
-                if (!vehicle) return null;
+                if (!vehicle) {
+                    if (createOnly) throw Problems.adoptionConflict();
+                    return null;
+                }
+            }
+            if (createOnly) {
+                const [created] = await transaction<EntityRow[]>`
+                  INSERT INTO sync_entities (id, user_id, entity_type, client_id, payload)
+                  VALUES (${createId(entityType)}, ${userId}, ${entityType}, ${clientId},
+                    ${transaction.json(attributes as Parameters<Sql['json']>[0])})
+                  ON CONFLICT (user_id, entity_type, client_id) DO NOTHING
+                  RETURNING id, user_id, client_id, payload, created_at, updated_at, deleted_at
+                `;
+                if (!created) {
+                    const [matching] = await transaction<EntityRow[]>`
+                      SELECT id, user_id, client_id, payload, created_at, updated_at, deleted_at
+                      FROM sync_entities
+                      WHERE user_id = ${userId} AND entity_type = ${entityType} AND client_id = ${clientId}
+                        AND deleted_at IS NULL AND payload = ${transaction.json(attributes as Parameters<Sql['json']>[0])}
+                    `;
+                    if (!matching) throw Problems.adoptionConflict();
+                    return toSyncedRecord(matching);
+                }
+                await transaction`
+                  INSERT INTO sync_changes (user_id, entity_type, operation, entity_id, client_id, payload)
+                  VALUES (${userId}, ${entityType}, ${SyncOperation.Upsert}, ${created.id}, ${clientId},
+                    ${transaction.json({ clientId, ...attributes } as Parameters<Sql['json']>[0])})
+                `;
+                return toSyncedRecord(created);
             }
             const [row] = await transaction<EntityRow[]>`
       INSERT INTO sync_entities (id, user_id, entity_type, client_id, payload)

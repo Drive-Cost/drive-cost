@@ -1,3 +1,5 @@
+import { AdoptionProtocol } from '@drivecost/contracts';
+import { requestsAdoption } from '../../platform/http/adoption';
 import { FastifyInstance } from 'fastify';
 import { toPublicRecord } from '../../platform/persistence/repository';
 import { VehicleSyncInput, vehicleSyncSchema } from './schemas';
@@ -20,11 +22,11 @@ export async function registerVehicleRoutes(app: FastifyInstance, service: Vehic
         return { data: (await service.list(request.user.sub)).map(toPublicRecord) };
     });
 
-    app.post<{ Body: VehicleSyncInput }>(
-        '/vehicles',
+    for (const adoptionOnly of [false, true]) app.post<{ Body: VehicleSyncInput }>(
+        adoptionOnly ? `/vehicles${AdoptionProtocol.pathSuffix}` : '/vehicles',
         { onRequest: [app.authenticate], schema: { body: vehicleSyncSchema } },
         async (request, reply) => {
-            const record = await service.upsert(request.user.sub, request.body);
+            const record = await service.upsert(request.user.sub, request.body, adoptionOnly || requestsAdoption(request.headers));
             if (!record) {
                 return reply.code(HttpStatus.NO_CONTENT).send();
             }

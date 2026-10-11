@@ -1,3 +1,6 @@
+// Adoption uploads may create or replay identical records, never replace existing content.
+export const AdoptionProtocol = { header: 'x-drivecost-adoption', pathSuffix: '/adoption', version: 'create-only-v1' } as const;
+
 export const SyncEntity = {
     Vehicle: 'vehicle',
     FuelEntry: 'fuel_entry',
@@ -404,7 +407,7 @@ function decodeMaintenanceEntry(value: unknown): MaintenanceEntrySyncPayload {
     return {
         ...decodeEntryBase(payload),
         type: requiredString(payload, 'type'),
-        description: requiredString(payload, 'description'),
+        description: requiredString(payload, 'description', true),
         cost: requiredNumber(payload, 'cost'),
     };
 }
@@ -467,9 +470,9 @@ function isHttpStatus(value: unknown): value is number {
     return typeof value === 'number' && Number.isSafeInteger(value) && value >= 100 && value <= 599;
 }
 
-function requiredString(payload: Record<string, unknown>, field: string): string {
+function requiredString(payload: Record<string, unknown>, field: string, allowEmpty = false): string {
     const value = payload[field];
-    if (typeof value !== 'string' || value.length === 0) throw new Error(`Invalid ${field}.`);
+    if (typeof value !== 'string' || (!allowEmpty && value.length === 0)) throw new Error(`Invalid ${field}.`);
     return value;
 }
 

@@ -1,6 +1,7 @@
 import type { SessionResponse, PullResponse } from '../../domain/sync';
 import { decodeSessionResponse, decodeAcknowledgement } from './dtos';
 import {
+  AdoptionProtocol,
   AuthRoute,
   decodeProblemDetails,
   decodePullResponse,
@@ -8,7 +9,13 @@ import {
   SyncRoute,
   SyncRouteByEntity,
 } from '../../domain/sync';
-import type { ProblemDetails, SyncEntityType, SyncOperationByEntity, SyncPayloadByOperation } from '../../domain/sync';
+import type {
+  ProblemDetails,
+  SyncEntityType,
+  SyncOperationByEntity,
+  SyncPayloadByOperation,
+  SyncPayloadByEntity,
+} from '../../domain/sync';
 
 const configuredApiUrl: unknown = process.env.EXPO_PUBLIC_API_BASE_URL;
 const API_BASE_URL = typeof configuredApiUrl === 'string' ? configuredApiUrl.replace(/\/$/, '') : undefined;
@@ -37,7 +44,8 @@ async function requestJson<Output>(
   method: (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD],
   decode: (value: unknown) => Output,
   payload?: object,
-  retried = false
+  retried = false,
+  options: { accessToken?: string; adoption?: boolean; requireAdoptionSupport?: boolean } = {}
 ): Promise<Output> {
   if (!API_BASE_URL) {
     throw new Error(SYNC_NOT_CONFIGURED_MESSAGE);
@@ -52,7 +60,10 @@ async function requestJson<Output>(
       method,
       headers: {
         ...(payload === undefined ? {} : { 'Content-Type': JSON_CONTENT_TYPE }),
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...((options.accessToken ?? accessToken)
+          ? { Authorization: `Bearer ${options.accessToken ?? accessToken}` }
+          : {}),
+        ...(options.adoption ? { [AdoptionProtocol.header]: AdoptionProtocol.version } : {}),
       },
       ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
       signal: controller.signal,
@@ -64,9 +75,12 @@ async function requestJson<Output>(
   const responseBody: unknown = await response.json().catch(() => undefined);
   if (!response.ok) {
     if (response.status === 401 && !retried && refreshHandler && (await refreshHandler())) {
-      return requestJson(path, method, decode, payload, true);
+      return requestJson(path, method, decode, payload, true, options);
     }
     throw new SyncApiError(response.status, decodeProblemDetails(responseBody));
+  }
+  if (options.requireAdoptionSupport && response.headers.get(AdoptionProtocol.header) !== AdoptionProtocol.version) {
+    throw new Error('Adding device data is not available yet. Your device data is safe.');
   }
   return decode(responseBody);
 }
@@ -107,6 +121,31 @@ export const apiClient = {
           decodeAcknowledgement
         )
       : requestJson(SyncRouteByEntity[entityType], HTTP_METHOD.Post, decodeAcknowledgement, payload),
+  pullAccountChanges: (
+    after: number,
+    accountAccessToken: string,
+    requireAdoptionSupport = false
+  ): Promise<PullResponse> =>
+    requestJson(
+      `${SyncRoute.Changes}?after=${after}`,
+      HTTP_METHOD.Get,
+      value => decodePullResponse(value, after),
+      undefined,
+      true,
+      { accessToken: accountAccessToken, requireAdoptionSupport }
+    ),
+  createAdoptedEntity: <Entity extends SyncEntityType>(
+    entity: Entity,
+    payload: SyncPayloadByEntity[Entity]
+  ): Promise<void> =>
+    requestJson(
+      `${SyncRouteByEntity[entity]}${AdoptionProtocol.pathSuffix}`,
+      HTTP_METHOD.Post,
+      decodeAcknowledgement,
+      payload,
+      false,
+      { adoption: true }
+    ),
   pullChanges: (after: number): Promise<PullResponse> =>
     requestJson(`${SyncRoute.Changes}?after=${after}`, HTTP_METHOD.Get, value => decodePullResponse(value, after)),
 };
