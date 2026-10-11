@@ -1,0 +1,25 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript", "oxc"],
+    "categories": {
+        "correctness": "error"
+    },
+    "rules": {
+        "typescript/no-explicit-any": "error",
+        "typescript/no-non-null-assertion": "error",
+        "eslint/eqeqeq": "error"
+    },
+    "ignorePatterns": ["node_modules/**", "dist/**", ".expo/**", ".test-data/**"],
+    "overrides": [
+        {
+            "files": ["test/**/*.ts"],
+            "rules": {
+                "typescript/no-explicit-any": "off",
+                "typescript/no-non-null-assertion": "off"
+            }
+        }
+    ],
+    "env": {
+        "node": true
+    }
+}

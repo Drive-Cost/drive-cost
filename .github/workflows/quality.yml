@@ -33,6 +33,7 @@ jobs:
       - run: npm run build
         working-directory: code/contracts
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
 
@@ -70,6 +71,7 @@ jobs:
       - run: npm run build
         working-directory: code/contracts
       - run: npm ci
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:postgres
         env:
