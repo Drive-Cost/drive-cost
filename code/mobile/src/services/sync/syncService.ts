@@ -1,3 +1,5 @@
+import { pushAdoptedData } from '../account/pushAdoptedData';
+import { canSyncOwner } from './syncAccess';
 import {
   deleteSyncJob,
   getSyncJobs,
@@ -52,7 +54,23 @@ async function syncQueue() {
     return;
   }
 
+  if (!(await canSyncOwner(owner.userId))) {
+    syncStatus.update({ phase: 'auth-required', error: null });
+    return;
+  }
   syncStatus.update({ phase: 'syncing', error: null });
+  try {
+    if (!(await pushAdoptedData(owner.userId))) {
+      syncStatus.update({ phase: 'auth-required', error: null });
+      return;
+    }
+  } catch (error) {
+    if (!(await canSyncOwner(owner.userId))) {
+      syncStatus.update({ phase: 'auth-required', error: null });
+      return;
+    }
+    throw error;
+  }
 
   const jobs = await getSyncJobs();
   let jobError: Error | null = null;
@@ -62,7 +80,15 @@ async function syncQueue() {
     if (jobId === undefined) continue;
 
     try {
+      if (!(await canSyncOwner(owner.userId))) {
+        syncStatus.update({ phase: 'auth-required', error: null });
+        return;
+      }
       await syncJob(job);
+      if (!(await canSyncOwner(owner.userId))) {
+        syncStatus.update({ phase: 'auth-required', error: null });
+        return;
+      }
       await deleteSyncJob(jobId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown sync error';
@@ -104,6 +130,10 @@ async function syncQueue() {
   const pendingError = await getPendingSyncError();
   if (pendingError !== null) throw new Error(pendingError);
 
+  if (!(await canSyncOwner(owner.userId))) {
+    syncStatus.update({ phase: 'auth-required', error: null });
+    return;
+  }
   syncStatus.update({ phase: 'synced', lastSyncedAt: new Date().toISOString(), error: null });
 }
 
@@ -114,6 +144,10 @@ export function subscribeToRemoteChanges(listener: (appliedChanges: number) => P
 
 export function subscribeToSyncStatus(listener: (status: SyncStatus) => void): () => void {
   return syncStatus.subscribe(listener);
+}
+
+export function showSignedOut(): void {
+  syncStatus.update({ phase: 'auth-required', error: null });
 }
 
 export async function syncDevice(): Promise<void> {

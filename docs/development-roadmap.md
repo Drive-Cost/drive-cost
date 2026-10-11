@@ -96,8 +96,11 @@ Status: core sync complete; production hardening in progress.
 - [x] Add the mobile session foundation: a single SecureStore session record,
   refresh rotation with single-flight retry, persisted one-owner dataset
   binding, owner-scoped pull cursors, and deterministic local-only,
-  reauthentication-required, and account-mismatch sync states. Account UI and
-  explicit dataset adoption remain deferred.
+  reauthentication-required, and account-mismatch sync states.
+- [x] Complete DC-210.4.2: existing-account sign-in, explicit unbound-data
+  adoption/replacement, collision-safe initial uploads, remote preflight before
+  transactional replacement, and safe sign-out preserving local data/owner/jobs
+  and cursor. General account switching remains deferred.
 - [ ] Add backup/restore, observability, and encrypted-secret operations.
 - [ ] Define and implement a vehicle-deletion policy before enabling vehicle deletion.
 

@@ -30,7 +30,9 @@ vi.mock('../../../src/services/sync/authSession', () => ({
   getMobileSession: () => ({ userId: 'user_1', mode: 'registered' }),
   getMobileSessionState: mocks.sessionState,
 }));
+vi.mock('../../../src/services/account/pushAdoptedData', () => ({ pushAdoptedData: async () => true }));
 vi.mock('../../../src/database/syncStateRepository', () => ({
+  isSessionBlocked: async () => false,
   getSyncOwner: async () => ({ userId: 'user_1', mode: 'registered' }),
 }));
 vi.mock('../../../src/services/sync/pullSync/pullSync', () => ({ pullRemoteChanges: mocks.pull }));

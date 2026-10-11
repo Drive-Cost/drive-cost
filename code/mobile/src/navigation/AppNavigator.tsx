@@ -13,6 +13,7 @@ import QuickAddOwnershipExpenseScreen from '../screens/QuickAddOwnershipExpense/
 import SettingsScreen from '../screens/Settings/Screen';
 import UpdateOdometerScreen from '../screens/UpdateOdometer/Screen';
 import CreateAccountScreen from '../screens/CreateAccount/Screen';
+import AccountDataChoiceScreen from '../screens/AccountDataChoice/Screen';
 import SignInScreen from '../screens/SignIn/Screen';
 import GarageStack from './GarageStack';
 import { detailScreenHeaders, primaryTabShell, primaryTabsUseNavigationHeaders } from './navigationShell';
@@ -120,6 +121,11 @@ export default function AppNavigator() {
         options={{ title: detailScreenHeaders.UpdateOdometer }}
       />
       <Stack.Screen name="CreateAccount" component={CreateAccountScreen} options={{ title: 'Create account' }} />
+      <Stack.Screen
+        name="AccountDataChoice"
+        component={AccountDataChoiceScreen}
+        options={{ title: 'Use your account' }}
+      />
       <Stack.Screen name="SignIn" component={SignInScreen} options={{ title: 'Sign in' }} />
     </Stack.Navigator>
   );

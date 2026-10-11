@@ -165,7 +165,8 @@ The five agreed correctness findings are addressed:
 
 These changes use the same boundary-validation, explicit-state, and transaction
 patterns discussed above. No schema, cost metric, sync identity, or dependency
-changed. Account switching and dataset merging remain separate product work.
+changed. General account switching remains separate product work. The subsequent
+DC-210.4.2 implementation adds explicit choices for unbound device data.
 
 A rotated refresh secret cannot be made durable when secure storage itself is
 unavailable. The replacement stays recoverable in memory while the app runs;
@@ -256,3 +257,22 @@ The compiler-only upgrade also passes contracts build/type checking and backend
 source/test type checking with 12 tests passing and seven Postgres tests skipped.
 No backend or shared-contract domain implementation changed in this follow-up.
 An Android bundle export passes; the app was not installed on a device.
+
+
+## DC-210.4.2 — 12 October 2026
+
+Existing-account access now includes an isolated local-data choice, guarded
+adoption, preflight plus transactional replacement, and durable local sign-out.
+The recent consistency fixes remain intact. The full flow, safety decisions,
+changed modules, verification, and deliberately deferred risks are documented in
+[DC-210.4.2 account access](dc-210-4-2-account-access.md).
+
+The safety extension is narrowly scoped: dedicated create-only adoption uploads
+close the preflight/push collision race without changing normal sync ownership
+or adding a general conflict-resolution framework. Initial snapshots acknowledge
+older legitimate upserts only after delivery, preserving later mutations.
+SQLite intent markers handle interruption across its boundary with SecureStore.
+
+Verification for DC-210.4.2 passes with 315 mobile tests across 56 files,
+13 backend tests, and eight real-Postgres integration tests. Required lint,
+type/build, formatting, and diff checks pass; Android export also passes.

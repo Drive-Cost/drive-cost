@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const storage = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), remove: vi.fn() }));
-const owner = vi.hoisted(() => ({ get: vi.fn(), bind: vi.fn() }));
+const owner = vi.hoisted(() => ({ get: vi.fn(), bind: vi.fn(), blocked: vi.fn() }));
 vi.mock('expo-secure-store', () => ({
   getItemAsync: storage.get,
   setItemAsync: storage.set,
   deleteItemAsync: storage.remove,
 }));
-vi.mock('../../../src/database/syncStateRepository', () => ({ getSyncOwner: owner.get, bindSyncOwner: owner.bind }));
+vi.mock('../../../src/database/syncStateRepository', () => ({
+  getSyncOwner: owner.get,
+  bindSyncOwner: owner.bind,
+  isSessionBlocked: owner.blocked,
+}));
 
 const response = {
   accessToken: 'access-1',
@@ -22,6 +26,7 @@ beforeEach(() => {
   vi.stubEnv('EXPO_PUBLIC_API_BASE_URL', 'https://drivecost.test');
   storage.set.mockResolvedValue(undefined);
   storage.remove.mockResolvedValue(undefined);
+  owner.blocked.mockResolvedValue(false);
   owner.get.mockResolvedValue({ userId: 'user-1', mode: 'registered' });
 });
 afterEach(() => {

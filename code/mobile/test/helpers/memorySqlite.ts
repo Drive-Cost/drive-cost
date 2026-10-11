@@ -1,3 +1,4 @@
+import { migrateAccountAdoption } from '../../src/database/migrations/accountAdoption';
 import { DatabaseSync } from 'node:sqlite';
 import type { SQLInputValue } from 'node:sqlite';
 
@@ -64,6 +65,7 @@ export function resetDatabase() {
     CREATE TABLE sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, entityType TEXT, operation TEXT,
       payload TEXT, createdAt TEXT, lastError TEXT, retryCount INTEGER, nextAttemptAt TEXT);
   `);
+  migrateAccountAdoption({ execSync: execute });
   connection
     .prepare(
       `INSERT INTO vehicles (clientId, brand, model, year, ownershipStartMileage,

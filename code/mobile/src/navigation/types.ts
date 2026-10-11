@@ -24,4 +24,5 @@ export type RootStackParamList = {
   UpdateOdometer: undefined;
   CreateAccount: undefined;
   SignIn: undefined;
+  AccountDataChoice: { attemptId: number; email: string; vehicleCount: number; recordCount: number };
 };

@@ -1,3 +1,4 @@
+import { canSyncOwner } from '../syncAccess';
 import { db } from '../../../database/db';
 import { getPullCursor, setPullCursor } from '../../../database/syncStateRepository';
 import { deleteVehicleFromSync, upsertVehicleFromSync } from '../../../database/vehicleRepository';
@@ -22,13 +23,17 @@ export async function pullRemoteChanges(ownerId: string): Promise<number> {
   return reconcilePulledChanges({
     getCursor: () => getPullCursor(ownerId),
     pullChanges: apiClient.pullChanges,
-    withTransaction: operation => db.withExclusiveTransactionAsync(operation),
+    withTransaction: operation =>
+      db.withExclusiveTransactionAsync(async transaction => {
+        if (!(await canSyncOwner(ownerId, transaction))) throw new Error('Sign in to resume sync.');
+        await operation(transaction);
+      }),
     applyChange,
     setCursor: (cursor, transaction) => setPullCursor(ownerId, cursor, transaction),
   });
 }
 
-async function applyChange(change: RemoteChange, transaction: typeof db): Promise<void> {
+export async function applyChange(change: RemoteChange, transaction: typeof db): Promise<void> {
   if (change.operation === SyncOperation.Delete) {
     return applyDeleteChange(change, transaction);
   }

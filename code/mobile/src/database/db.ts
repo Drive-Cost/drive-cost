@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { migrateAccountAdoption } from './migrations/accountAdoption';
 import { SyncOperation } from '../domain/sync';
 
 export const db = SQLite.openDatabaseSync('drivecost.db');
@@ -209,6 +210,7 @@ export const initDatabase = () => {
     `UPDATE ownership_expenses SET category = 'other' WHERE category IS NULL OR category NOT IN ('insurance', 'tax', 'inspection', 'tolls', 'parking', 'carWash', 'financingInterest', 'accessories', 'other');`
   );
 
+  migrateAccountAdoption(db);
   migrateVehicleOwnedTablesToCascade();
   db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicles_client_id ON vehicles(clientId);`);
   db.execSync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_fuel_entries_client_id ON fuel_entries(clientId);`);

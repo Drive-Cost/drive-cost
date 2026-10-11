@@ -1,5 +1,5 @@
 import { signIn, AccountOwnershipError } from '../../services/account/accountService';
-import { useReducer, useRef } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -10,6 +10,8 @@ import { syncDevice } from '../../services/sync/syncService';
 export default function SignInScreen({ navigation }: NativeStackScreenProps<RootStackParamList, 'SignIn'>) {
   const [state, dispatch] = useReducer(reduce, undefined, initialState);
   const submitting = useRef(false);
+  const flight = useRef<AbortController | null>(null);
+  useEffect(() => () => flight.current?.abort(), []);
   const { email, password } = state.input;
   const loading = state.tag !== 'editing';
   const error = state.tag === 'editing' ? state.error : null;
@@ -20,8 +22,15 @@ export default function SignInScreen({ navigation }: NativeStackScreenProps<Root
     submitting.current = true;
     dispatch({ type: 'submit' });
     try {
-      await signIn(email, password);
+      const controller = new AbortController();
+      flight.current = controller;
+      const result = await signIn(email, password, controller.signal);
+      flight.current = null;
       dispatch({ type: 'success' });
+      if (result.tag === 'choose-data') {
+        navigation.replace('AccountDataChoice', result);
+        return;
+      }
       void syncDevice().catch(() => undefined);
       navigation.goBack();
     } catch (caught) {
@@ -34,6 +43,7 @@ export default function SignInScreen({ navigation }: NativeStackScreenProps<Root
       });
     } finally {
       submitting.current = false;
+      flight.current = null;
     }
   };
   return (

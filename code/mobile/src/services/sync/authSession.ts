@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { useAccountStore } from '../../store/accountStore';
 import { SyncApiError, apiClient } from './apiClient';
-import { bindSyncOwner, getSyncOwner } from '../../database/syncStateRepository';
+import { bindSyncOwner, getSyncOwner, isSessionBlocked } from '../../database/syncStateRepository';
 import type { SessionResponse } from '../../domain/sync';
 
 const SESSION_KEY = 'drivecost.auth-session.v2';
@@ -73,6 +73,10 @@ export async function persistMobileSession(response: SessionResponse): Promise<M
 
 export async function initializeAuthSession(): Promise<MobileSessionState> {
   if (!apiClient.isConfigured) return setLocalOnly();
+  if (await isSessionBlocked()) {
+    await clearSignedOutSession();
+    return state;
+  }
   if (state === 'reauth-required' && !session) return state;
   if (pendingRotation) await saveRotation();
   if (!session) {
@@ -118,6 +122,12 @@ export async function clearAuthSession(): Promise<void> {
   state = 'reauth-required';
   publishSession();
   await writeSecureSession(() => SecureStore.deleteItemAsync(SESSION_KEY));
+}
+
+/** Explicit sign-out removes retired credentials too; normal refresh recovery is unchanged. */
+export async function clearSignedOutSession(): Promise<void> {
+  await clearAuthSession();
+  await writeSecureSession(() => SecureStore.deleteItemAsync(LEGACY_ACCESS_TOKEN_KEY));
 }
 
 async function saveRotation(): Promise<void> {

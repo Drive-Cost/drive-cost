@@ -24,7 +24,10 @@ export type AddActionOption = {
   id: AddAction;
   title: string;
   detail: string;
-  route: Exclude<keyof RootStackParamList, 'PrimaryTabs'>;
+  route: Extract<
+    keyof RootStackParamList,
+    'FuelEntry' | 'ChargingEntry' | 'MaintenanceEntry' | 'OwnershipExpenseEntry' | 'UpdateOdometer'
+  >;
 };
 
 const commonActions: readonly AddActionOption[] = [

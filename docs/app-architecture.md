@@ -200,7 +200,10 @@ Guest upgrades retain the owner ID and atomically update its mode before
 publishing the registered session. Transient refresh failures preserve
 credentials; only an explicit refresh rejection invalidates them. Secure writes
 serialize, and a rotated secret whose storage fails is retained in memory for
-storage retry. Account switching and dataset adoption remain out of scope.
+storage retry. Unbound datasets support explicit adoption or replacement during existing-account
+sign-in. General account switching remains out of scope. See
+[DC-210.4.2 account access](dc-210-4-2-account-access.md) for preflight, guarded
+initial uploads, transactional replacement, and durable sign-out boundaries.
 
 ### Development tooling
 

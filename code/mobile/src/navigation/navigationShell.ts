@@ -32,4 +32,5 @@ export const detailScreenHeaders: Record<Exclude<keyof RootStackParamList, 'Prim
   UpdateOdometer: 'Update odometer',
   CreateAccount: 'Create account',
   SignIn: 'Sign in',
+  AccountDataChoice: 'Use your account',
 };

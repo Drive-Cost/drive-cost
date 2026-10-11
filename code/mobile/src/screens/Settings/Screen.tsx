@@ -1,4 +1,6 @@
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { signOut } from '../../services/account/accountService';
+import { useSubmissionGuard } from '../../hooks/useSubmissionGuard';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SyncStatusCard from '../../components/SyncStatusCard';
 import { syncDevice } from '../../services/sync/syncService';
@@ -10,7 +12,7 @@ import { useAccountStore } from '../../store/accountStore';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/types';
 import { getSyncOwner } from '../../database/syncStateRepository';
-import { useCallback, useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { initialState, reduce } from './reducer';
 
 export default function SettingsScreen() {
@@ -21,6 +23,28 @@ export default function SettingsScreen() {
   const { session, status } = useAccountStore();
   const matchingSession = status === 'authenticated' && session?.userId === owner?.userId ? session : null;
   const request = useRef(0);
+  const [signOutState, setSignOutState] = useState<
+    { tag: 'idle' } | { tag: 'working' } | { tag: 'error'; message: string }
+  >({ tag: 'idle' });
+  const guard = useSubmissionGuard();
+  const finishSignOut = () =>
+    guard(async () => {
+      setSignOutState({ tag: 'working' });
+      try {
+        await signOut();
+        setSignOutState({ tag: 'idle' });
+      } catch {
+        setSignOutState({
+          tag: 'error',
+          message: 'Unable to finish signing out. Please try again. Your device records are safe.',
+        });
+      }
+    });
+  const confirmSignOut = () =>
+    Alert.alert('Sign out?', 'Your records will stay on this device. Sign in to the same account to resume sync.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', onPress: () => void finishSignOut() },
+    ]);
   const loadOwner = useCallback(async () => {
     const generation = ++request.current;
     dispatch({ type: 'load' });
@@ -46,6 +70,16 @@ export default function SettingsScreen() {
         <Text style={styles.title}>Settings</Text>
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Account</Text>
+          {signOutState.tag === 'error' ? (
+            <View>
+              <Text accessibilityLiveRegion="polite" style={styles.copy}>
+                {signOutState.message}
+              </Text>
+              <Pressable accessibilityRole="button" onPress={() => void finishSignOut()} style={styles.secondaryAction}>
+                <Text style={styles.secondaryText}>Try signing out again</Text>
+              </Pressable>
+            </View>
+          ) : null}
           {state.tag === 'loading' ? (
             <Text style={styles.copy}>Loading account details…</Text>
           ) : state.tag === 'error' ? (
@@ -89,11 +123,21 @@ export default function SettingsScreen() {
                       ? 'Offline — changes will sync later'
                       : 'Sync problem'}
               </Text>
+              <Pressable
+                accessibilityRole="button"
+                disabled={signOutState.tag === 'working'}
+                onPress={confirmSignOut}
+                style={styles.secondaryAction}
+              >
+                <Text style={styles.secondaryText}>{signOutState.tag === 'working' ? 'Signing out…' : 'Sign out'}</Text>
+              </Pressable>
             </View>
           ) : owner ? (
             <>
               <View style={styles.row}>
-                <Text style={styles.rowTitle}>Sign in to resume sync</Text>
+                <Text style={styles.rowTitle}>
+                  {owner.mode === 'registered' ? 'Signed out' : 'Sign in to resume sync'}
+                </Text>
                 <Text style={styles.copy}>Your DriveCost data remains safely stored on this device.</Text>
               </View>
               <Pressable accessibilityRole="button" style={styles.action} onPress={() => navigation.navigate('SignIn')}>

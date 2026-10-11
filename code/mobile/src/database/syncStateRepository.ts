@@ -56,3 +56,18 @@ export async function setPullCursor(
     String(cursor)
   );
 }
+
+/** Durable local sign-out intent also protects activation across SecureStore/SQLite boundaries. */
+export async function isSessionBlocked(database: SQLite.SQLiteDatabase = db): Promise<boolean> {
+  const row = await database.getFirstAsync<{ value: string }>(
+    "SELECT value FROM sync_state WHERE key = 'session_blocked'"
+  );
+  return row?.value === '1';
+}
+
+export async function setSessionBlocked(blocked: boolean, database: SQLite.SQLiteDatabase = db): Promise<void> {
+  await database.runAsync(
+    "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('session_blocked', ?)",
+    blocked ? '1' : '0'
+  );
+}

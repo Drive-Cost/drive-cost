@@ -131,7 +131,9 @@ SecureStore credentials, so losing or clearing credentials never transfers or
 unbounds local business data. A matching authenticated session is required
 before either outbox push or pull sync; an unbound dataset remains fully local,
 and a different authenticated user produces an account-mismatch state rather
-than a merge or replacement.
+than a merge or replacement. An unbound dataset may be explicitly adopted or
+replaced during existing-account sign-in under the guarded DC-210.4.2 flow;
+already-bound datasets cannot switch accounts.
 
 Pull cursors are stored under the bound owner ID because backend cursors are
 account-specific. Existing access-token-only installations are treated
@@ -153,3 +155,17 @@ Entry and vehicle deletion also read their resulting snapshots before commit,
 so reload failure cannot report a committed deletion as failed. Vehicle-scoped
 cache generations keep older reads from overwriting these committed snapshots.
 No persisted data format or client identity changes accompany this boundary.
+
+
+## ADR-014: Existing-Account Data Choices Have Explicit Commit Boundaries
+
+An existing-account login on a non-empty unbound installation remains isolated
+until its data choice is confirmed. Remote preflight precedes any replacement;
+reset, import, binding, and cursor changes share one SQLite transaction.
+Adoption rejects ambiguous identities and unsafe pending operations, and initial
+uploads create or replay identical content without replacing cloud records.
+Their durable bootstrap queue must complete before normal push/pull resumes.
+SecureStore activation follows a blocked SQLite binding, while durable sign-out
+intent prevents credentials from restoring sync after interrupted removal.
+See [DC-210.4.2](dc-210-4-2-account-access.md). General account switching and
+conflict-resolution UX remain separate product decisions.
