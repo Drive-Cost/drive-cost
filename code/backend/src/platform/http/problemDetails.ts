@@ -96,9 +96,8 @@ export function toHttpProblem(error: unknown): HttpProblem {
     }
 
     const statusCode = getErrorStatusCode(error);
-    if (statusCode && STATUS_PROBLEMS[statusCode]) {
-        return problem(STATUS_PROBLEMS[statusCode]!);
-    }
+    const code = statusCode === undefined ? undefined : STATUS_PROBLEMS[statusCode];
+    if (code) return problem(code);
 
     return Problems.internalError();
 }

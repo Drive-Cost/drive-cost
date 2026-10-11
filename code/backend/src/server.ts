@@ -6,7 +6,7 @@ import { PostgresRepository } from './platform/persistence/postgresRepository';
 async function start() {
     const env = getEnv();
     const repository =
-        env.persistenceDriver === 'postgres' ? new PostgresRepository(env.databaseUrl!) : new FileRepository();
+        env.persistenceDriver === 'postgres' ? new PostgresRepository(env.databaseUrl) : new FileRepository();
     const app = await createApp({ jwtSecret: env.jwtSecret, repository });
 
     try {

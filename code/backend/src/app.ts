@@ -7,6 +7,8 @@ import { registerHealthRoutes } from './modules/health/routes';
 import { registerAuthRoutes } from './modules/auth/routes';
 import { registerVehicleRoutes } from './modules/vehicles/routes';
 import { registerEntryRoutes } from './modules/entries/routes';
+import { createVehicleService } from './modules/vehicles/service';
+import { createEntryService } from './modules/entries/service';
 import { registerSyncRoutes } from './modules/sync/routes';
 import {
     HttpProblem,
@@ -54,8 +56,10 @@ export async function createApp({ jwtSecret, logger = true, repository }: AppOpt
 
     await registerHealthRoutes(app);
     await registerAuthRoutes(app, persistence);
-    await registerVehicleRoutes(app, persistence);
-    await registerEntryRoutes(app, persistence);
+    const vehicles = createVehicleService(persistence);
+    const entries = createEntryService(persistence, vehicles);
+    await registerVehicleRoutes(app, vehicles);
+    await registerEntryRoutes(app, entries);
     await registerSyncRoutes(app, persistence);
 
     app.addHook('onClose', async () => persistence.close());

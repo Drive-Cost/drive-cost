@@ -16,9 +16,10 @@ export function getEnv() {
         throw new Error('PERSISTENCE_DRIVER must be either file or postgres.');
     }
 
-    if (persistenceDriver === 'postgres' && !databaseUrl) {
-        throw new Error('DATABASE_URL is required when using Postgres.');
+    if (persistenceDriver === 'postgres') {
+        if (!databaseUrl) throw new Error('DATABASE_URL is required when using Postgres.');
+        return { port, jwtSecret, persistenceDriver, databaseUrl } as const;
     }
 
-    return { port, jwtSecret, persistenceDriver, databaseUrl };
+    return { port, jwtSecret, persistenceDriver } as const;
 }

@@ -1,8 +1,7 @@
 import { FastifyInstance } from 'fastify';
-import { SyncEntity } from '@drivecost/contracts';
-import { DriveCostRepository, toPublicRecord } from '../../platform/persistence/repository';
+import { toPublicRecord } from '../../platform/persistence/repository';
 import { VehicleSyncInput, vehicleSyncSchema } from './schemas';
-import { Problems } from '../../platform/http/problemDetails';
+import type { VehicleService } from './service';
 import { HttpStatus } from '../../platform/http/statusCodes';
 
 interface DeleteVehicleParams {
@@ -16,23 +15,16 @@ const deleteVehicleParamsSchema = {
     properties: { clientId: { type: 'string', minLength: 1, maxLength: 128 } },
 } as const;
 
-export async function registerVehicleRoutes(app: FastifyInstance, repository: DriveCostRepository) {
+export async function registerVehicleRoutes(app: FastifyInstance, service: VehicleService) {
     app.get('/vehicles', { onRequest: [app.authenticate] }, async (request) => {
-        return { data: (await repository.listEntities(request.user.sub, SyncEntity.Vehicle)).map(toPublicRecord) };
+        return { data: (await service.list(request.user.sub)).map(toPublicRecord) };
     });
 
     app.post<{ Body: VehicleSyncInput }>(
         '/vehicles',
         { onRequest: [app.authenticate], schema: { body: vehicleSyncSchema } },
         async (request, reply) => {
-            if (
-                request.body.trackingStartMileage < request.body.ownershipStartMileage ||
-                request.body.currentOdometer < request.body.trackingStartMileage
-            ) {
-                throw Problems.invalidMileageBaseline();
-            }
-
-            const record = await repository.upsertEntity(request.user.sub, SyncEntity.Vehicle, request.body);
+            const record = await service.upsert(request.user.sub, request.body);
             if (!record) {
                 return reply.code(HttpStatus.NO_CONTENT).send();
             }
@@ -46,7 +38,7 @@ export async function registerVehicleRoutes(app: FastifyInstance, repository: Dr
         '/vehicles/:clientId',
         { onRequest: [app.authenticate], schema: { params: deleteVehicleParamsSchema } },
         async (request, reply) => {
-            await repository.deleteVehicle(request.user.sub, request.params.clientId);
+            await service.delete(request.user.sub, request.params.clientId);
             return reply.code(HttpStatus.NO_CONTENT).send();
         },
     );
