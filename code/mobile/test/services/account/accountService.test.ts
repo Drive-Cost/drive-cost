@@ -1,7 +1,11 @@
 vi.mock('../../../src/services/account/accountAccess', () => ({}));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../../src/database/syncStateRepository', () => ({ getSyncOwner: vi.fn(), bindSyncOwner: vi.fn() }));
+vi.mock('../../../src/database/syncStateRepository', () => ({
+  getSyncOwner: vi.fn(),
+  bindSyncOwner: vi.fn(),
+  requireAccountLifecycleAvailable: async () => undefined,
+}));
 vi.mock('../../../src/services/sync/apiClient', () => ({
   apiClient: { login: vi.fn(), logout: vi.fn(), register: vi.fn(), upgrade: vi.fn() },
 }));

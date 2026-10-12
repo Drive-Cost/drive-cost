@@ -21,3 +21,4 @@ Account lifecycle implementation notes:
 
 - [Existing-account access (DC-210.4.2)](dc-210-4-2-account-access.md).
 - [Backend account deletion (DC-210.5.2)](dc-210-5-2-backend-account-deletion.md).
+- [Mobile account deletion and recovery (DC-210.5.3)](dc-210-5-3-mobile-account-deletion.md).

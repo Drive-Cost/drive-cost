@@ -1,3 +1,6 @@
+vi.mock('../../../src/database/db', () => ({
+  db: { withExclusiveTransactionAsync: async (operation: (transaction: object) => Promise<void>) => operation({}) },
+}));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SyncEntity, SyncOperation } from '../../../src/domain/sync';
 
@@ -79,7 +82,10 @@ describe('sync service scheduling and status', () => {
     release();
     await pending;
     expect(mocks.sync).toHaveBeenCalledTimes(2);
-    expect(mocks.deleteSyncJob.mock.calls).toEqual([[1], [2]]);
+    expect(mocks.deleteSyncJob.mock.calls).toEqual([
+      [1, expect.any(Object)],
+      [2, expect.any(Object)],
+    ]);
   });
 
   it('preserves a recoverable error while failed jobs are waiting for their backoff', async () => {

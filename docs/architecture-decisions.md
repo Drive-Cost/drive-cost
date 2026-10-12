@@ -183,3 +183,18 @@ subject to product/privacy approval and scheduled expiry maintenance. Mobile
 cleanup remains a separate task and requires matching verified completion.
 See [DC-210.5.2](dc-210-5-2-backend-account-deletion.md) for the API, guest policy,
 file-adapter limitations, backup/restore risks, and exact invariants.
+
+
+## ADR-016: Mobile Deletion Has Durable Consent And Cleanup Boundaries
+
+Mobile account deletion reuses the hashed-capability receipt protocol. The operation
+secret belongs only in SecureStore; SQLite holds non-secret intent and the approved
+business-dataset signature. Unknown outcomes preserve local data/ownership and pause
+cloud delivery while recording remains usable. A matching verified receipt permits
+cleanup only for the approved signature; intervening business changes require new
+explicit consent. Dataset reset and owner/cursor/outbox/adoption removal share one
+SQLite transaction, followed by recoverable secure credential removal under a
+retained lifecycle fence. Secondary account-unavailable devices retain their local
+records rather than infer cleanup authority from failed authentication.
+See [DC-210.5.3](dc-210-5-3-mobile-account-deletion.md) for startup recovery, in-flight
+fences, guest limitations, retention decisions, and remaining release dependencies.

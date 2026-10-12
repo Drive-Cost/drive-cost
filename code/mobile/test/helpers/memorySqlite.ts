@@ -11,6 +11,7 @@ type Adapter = {
 
 let connection: DatabaseSync;
 let failedRead: string | null = null;
+let transactionTail: Promise<void> = Promise.resolve();
 
 export const database: Adapter = {
   async runAsync(sql, ...params) {
@@ -28,6 +29,12 @@ export const database: Adapter = {
     return (connection.prepare(sql).get(...params) ?? null) as Row | null;
   },
   async withExclusiveTransactionAsync(operation) {
+    const previous = transactionTail;
+    let release: () => void = () => undefined;
+    transactionTail = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    await previous;
     connection.exec('BEGIN');
     try {
       await operation(database);
@@ -35,6 +42,8 @@ export const database: Adapter = {
     } catch (error) {
       connection.exec('ROLLBACK');
       throw error;
+    } finally {
+      release();
     }
   },
 };
@@ -42,6 +51,7 @@ export const database: Adapter = {
 export function resetDatabase() {
   connection = new DatabaseSync(':memory:');
   failedRead = null;
+  transactionTail = Promise.resolve();
   connection.exec(`
     PRAGMA foreign_keys = ON;
     CREATE TABLE vehicles (

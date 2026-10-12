@@ -118,14 +118,12 @@ describe('session response validation', () => {
   it('preflights a temporary account with its token without activating it or refreshing another session', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ data: [], nextCursor: 0 }), {
-            status: 200,
-            headers: { 'x-drivecost-adoption': 'create-only-v1' },
-          })
-        )
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: [], nextCursor: 0 }), {
+          status: 200,
+          headers: { 'x-drivecost-adoption': 'create-only-v1' },
+        })
+      )
     );
     const client = (await import('../../../src/services/sync/apiClient')).apiClient;
     const refresh = vi.fn();
@@ -158,4 +156,92 @@ describe('session response validation', () => {
     expect(vi.mocked(fetch).mock.calls[0][0]).toBe('https://api.drivecost.test/vehicles/adoption');
     expect(vi.mocked(fetch).mock.calls[0][1]?.headers).toMatchObject({ 'x-drivecost-adoption': 'create-only-v1' });
   });
+});
+
+describe('account deletion protocol', () => {
+  it.each([401, 403])('never retries deletion HTTP %s through refresh', async status => {
+    const { apiClient } = await import('../../../src/services/sync/apiClient');
+    const refresh = vi.fn().mockResolvedValue(true);
+    apiClient.setRefreshHandler(refresh);
+    const request = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status,
+          type: 'https://drivecost.app/problems/deletion-confirmation-failed',
+          title: 'Rejected',
+        }),
+        { status }
+      )
+    );
+    vi.stubGlobal('fetch', request);
+    await expect(
+      apiClient.deleteAccount({ operationSecret: 'capability', password: 'current-password' }, 'explicit-token')
+    ).rejects.toThrow();
+    expect(request).toHaveBeenCalledOnce();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(request.mock.calls[0][0]).toBe('https://api.drivecost.test/account/deletion');
+    expect(request.mock.calls[0][1].headers.Authorization).toBe('Bearer explicit-token');
+  });
+  it('recovers by capability alone without forwarding an old bearer token, and keeps unknown distinct', async () => {
+    const client = await clientReturning({ status: 'unknown' });
+    client.setAccessToken('old-token');
+    await expect(client.deletionStatus('secret')).resolves.toEqual({ status: 'unknown' });
+    const request = vi.mocked(fetch).mock.calls[0];
+    expect(request[0]).toBe('https://api.drivecost.test/account/deletion/status');
+    expect(request[1]?.headers).toEqual({ 'Content-Type': 'application/json' });
+    const body = request[1]?.body;
+    if (typeof body !== 'string') throw new Error('Expected JSON request body');
+    expect(JSON.parse(body)).toEqual({ operationSecret: 'secret' });
+  });
+  it('only recognizes an explicit 410 account-unavailable problem as terminal account evidence', async () => {
+    const { apiClient } = await import('../../../src/services/sync/apiClient');
+    const unavailable = vi.fn();
+    apiClient.setUnavailableHandler(unavailable);
+    apiClient.setAccessToken('account-token');
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 401 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 410 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: 410,
+            type: 'https://drivecost.app/problems/account-unavailable',
+            title: 'Unavailable',
+          }),
+          { status: 410 }
+        )
+      );
+    vi.stubGlobal('fetch', request);
+    await expect(apiClient.pullChanges(0)).rejects.toThrow();
+    expect(unavailable).not.toHaveBeenCalled();
+    await expect(apiClient.pullChanges(0)).rejects.toThrow();
+    expect(unavailable).not.toHaveBeenCalled();
+    await expect(apiClient.pullChanges(0)).rejects.toThrow();
+    expect(unavailable).toHaveBeenCalledExactlyOnceWith('account-token');
+  });
+});
+
+it('bounds an interrupted deletion response body with the request timeout', async () => {
+  vi.useFakeTimers();
+  try {
+    const { apiClient } = await import('../../../src/services/sync/apiClient');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (_url, options: RequestInit) => ({
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise((_resolve, reject) =>
+            options.signal?.addEventListener('abort', () => reject(new Error('Interrupted body')), { once: true })
+          ),
+      }))
+    );
+    const response = apiClient.deleteAccount({ operationSecret: 'secret', password: 'current-password' }, 'token');
+    const rejected = expect(response).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejected;
+  } finally {
+    vi.useRealTimers();
+  }
 });

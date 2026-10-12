@@ -11,6 +11,8 @@ vi.mock('../../../src/database/syncStateRepository', () => ({
   getSyncOwner: owner.get,
   bindSyncOwner: owner.bind,
   isSessionBlocked: owner.blocked,
+  getAccountLifecycleBlock: async () => null,
+  markAccountUnavailable: vi.fn(),
 }));
 
 const response = {
@@ -179,4 +181,21 @@ describe('recoverable mobile sessions', () => {
     expect(auth.getMobileSession()?.refreshToken).toBe('new-sign-in');
     expect(storage.set).toHaveBeenCalledTimes(2);
   });
+});
+
+it('a late refresh cannot publish credentials after the deletion fence is established', async () => {
+  const { auth, apiClient } = await setup();
+  let reply!: (value: typeof response) => void;
+  const pending = new Promise<typeof response>(resolve => {
+    reply = resolve;
+  });
+  vi.spyOn(apiClient, 'refresh').mockReturnValue(pending);
+  const refreshing = auth.refreshAuthSession();
+  await vi.waitFor(() => expect(apiClient.refresh).toHaveBeenCalledOnce());
+  auth.pauseAccountSession('deletion-pending');
+  reply({ ...response, refreshToken: 'obsolete-rotation' });
+  expect(await refreshing).toBe(false);
+  expect(auth.getMobileSessionState()).toBe('deletion-pending');
+  expect(auth.getMobileSession()?.refreshToken).toBe('refresh-1');
+  expect(storage.set).toHaveBeenCalledOnce();
 });

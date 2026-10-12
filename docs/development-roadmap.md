@@ -101,6 +101,13 @@ Status: core sync complete; production hardening in progress.
   adoption/replacement, collision-safe initial uploads, remote preflight before
   transactional replacement, and safe sign-out preserving local data/owner/jobs
   and cursor. General account switching remains deferred.
+- [x] Complete DC-210.5.2: transactional backend account deletion, password/live-session
+  confirmation, guest proof, durable recovery receipts, and deletion concurrency guards.
+- [x] Complete DC-210.5.3: Settings account deletion, verified receipt recovery,
+  consent-aware transactional device cleanup, restart recovery, and stale-context fences.
+- [ ] Approve receipt/backup retention and restore safeguards, schedule receipt expiry,
+  provide the store deletion-request page, and complete native/two-device deletion QA.
+- [ ] Approve safe secondary-device/unrecoverable-receipt local-data removal policy.
 - [ ] Add backup/restore, observability, and encrypted-secret operations.
 - [ ] Define and implement a vehicle-deletion policy before enabling vehicle deletion.
 
