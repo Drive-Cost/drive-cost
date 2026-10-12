@@ -16,3 +16,8 @@ Use this directory by responsibility rather than by historical document name.
 When documents appear to conflict, resolve the question using the authority in
 this table. Escalate a genuine conflict between a product principle, cost
 semantic, and architectural decision instead of silently changing behaviour.
+
+Account lifecycle implementation notes:
+
+- [Existing-account access (DC-210.4.2)](dc-210-4-2-account-access.md).
+- [Backend account deletion (DC-210.5.2)](dc-210-5-2-backend-account-deletion.md).

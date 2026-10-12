@@ -169,3 +169,17 @@ SecureStore activation follows a blocked SQLite binding, while durable sign-out
 intent prevents credentials from restoring sync after interrupted removal.
 See [DC-210.4.2](dc-210-4-2-account-access.md). General account switching and
 conflict-resolution UX remain separate product decisions.
+
+
+## ADR-015: Account Deletion Is Physical And Recoverable
+
+Account deletion physically removes identity, sync entities/tombstones/history,
+and refresh sessions in one PostgreSQL transaction. A minimal hashed-capability
+receipt commits with deletion for lost-response recovery; missing evidence means
+unknown. Account locks fence concurrent mutations and session creation, while
+ordinary JWT authentication checks account existence without changing sign-out's
+short-lived access-token semantics. Receipt lifetime is provisionally 30 days,
+subject to product/privacy approval and scheduled expiry maintenance. Mobile
+cleanup remains a separate task and requires matching verified completion.
+See [DC-210.5.2](dc-210-5-2-backend-account-deletion.md) for the API, guest policy,
+file-adapter limitations, backup/restore risks, and exact invariants.
