@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { DatabaseShape, SyncedRecord } from '../types/domain';
 import { createId } from './ids';
 
@@ -7,6 +8,8 @@ const DATA_DIR = process.env.DRIVECOST_DATA_DIR || path.join(process.cwd(), 'dat
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 const defaultDatabase = (): DatabaseShape => ({
+    deletionReceipts: [],
+    nextChangeSequence: 1,
     users: [],
     authSessions: [],
     syncChanges: [],
@@ -24,18 +27,44 @@ export function ensureDatabase() {
     }
 
     if (!fs.existsSync(DB_FILE)) {
-        fs.writeFileSync(DB_FILE, JSON.stringify(defaultDatabase(), null, 2));
+        writeDatabase(defaultDatabase());
     }
 }
 
 export function readDatabase(): DatabaseShape {
     ensureDatabase();
     const database = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) as Partial<DatabaseShape>;
-    return { ...defaultDatabase(), ...database, syncChanges: database.syncChanges ?? [] };
+    const syncChanges = database.syncChanges ?? [];
+    const nextChangeSequence = syncChanges.reduce((next, change) => Math.max(next, change.sequence + 1), database.nextChangeSequence ?? 1);
+    return { ...defaultDatabase(), ...database, syncChanges, nextChangeSequence };
 }
 
 export function writeDatabase(database: DatabaseShape) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(database, null, 2));
+    // Single-process development adapter: synchronous replacement is its commit boundary.
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const temporaryFile = path.join(DATA_DIR, `.db-${randomUUID()}.tmp`);
+    try {
+        const descriptor = fs.openSync(temporaryFile, 'wx', 0o600);
+        try {
+            fs.writeFileSync(descriptor, JSON.stringify(database, null, 2));
+            fs.fsyncSync(descriptor);
+        } finally {
+            fs.closeSync(descriptor);
+        }
+        fs.renameSync(temporaryFile, DB_FILE);
+        syncDatabaseDirectory();
+    } finally {
+        if (fs.existsSync(temporaryFile)) fs.unlinkSync(temporaryFile);
+    }
+}
+
+export function syncDatabaseDirectory(): void {
+    const directory = fs.openSync(DATA_DIR, 'r');
+    try {
+        fs.fsyncSync(directory);
+    } finally {
+        fs.closeSync(directory);
+    }
 }
 
 export function upsertByClientId(

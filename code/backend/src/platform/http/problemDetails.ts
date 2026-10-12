@@ -11,6 +11,21 @@ const STATUS_PROBLEMS: Partial<Record<number, ProblemCode>> = {
 };
 
 const problemDefinitionByCode = {
+    accountUnavailable: {
+        status: 410,
+        title: 'Account is no longer available',
+        type: 'https://drivecost.app/problems/account-unavailable',
+    },
+    deletionConfirmationFailed: {
+        status: 403,
+        title: 'Account deletion could not be confirmed',
+        type: 'https://drivecost.app/problems/deletion-confirmation-failed',
+    },
+    deletionOperationConflict: {
+        status: 409,
+        title: 'Deletion operation has already been used',
+        type: 'https://drivecost.app/problems/deletion-operation-conflict',
+    },
     invalidRequest: { status: 400, title: 'Invalid request', type: 'https://drivecost.app/problems/invalid-request' },
     unauthorized: {
         status: 401,
@@ -52,6 +67,9 @@ const problemDefinitionByCode = {
 } as const;
 
 export const Problems = {
+    accountUnavailable: () => problem('accountUnavailable'),
+    deletionConfirmationFailed: () => problem('deletionConfirmationFailed'),
+    deletionOperationConflict: () => problem('deletionOperationConflict'),
     invalidRequest: (detail?: string) => problem('invalidRequest', detail),
     unauthorized: (detail?: string) => problem('unauthorized', detail),
     invalidCredentials: (detail?: string) => problem('invalidCredentials', detail),

@@ -561,3 +561,79 @@ function isValidRecurringDateTime(value: string): boolean {
     const datePart = /^(\d{4}-\d{2}-\d{2})T/.exec(value)?.[1];
     return datePart !== undefined && isCalendarDate(datePart) && !Number.isNaN(Date.parse(value));
 }
+
+// Generate operationSecret with 32 cryptographically random bytes, base64url encoded.
+export const AccountRoute = {
+    Deletion: '/account/deletion',
+    DeletionStatus: '/account/deletion/status',
+} as const;
+export type AccountDeletionRequest = { operationSecret: string } & (
+    | { password: string; refreshToken?: never }
+    | { refreshToken: string; password?: never }
+);
+export type DeletionStatusRequest = { operationSecret: string };
+export type CompletedAccountDeletion = {
+    status: 'completed';
+    deletedUserId: string;
+    completedAt: string;
+};
+export type AccountDeletionStatus = CompletedAccountDeletion | { status: 'unknown' };
+const operationSecretSchema = {
+    type: 'string',
+    pattern: '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$',
+    minLength: 43,
+    maxLength: 43,
+} as const;
+export const accountDeletionRequestSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['operationSecret'],
+    properties: {
+        operationSecret: operationSecretSchema,
+        password: authPasswordSchema,
+        refreshToken: refreshTokenSchema,
+    },
+    oneOf: [{ required: ['password'] }, { required: ['refreshToken'] }],
+} as const;
+export const deletionStatusRequestSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['operationSecret'],
+    properties: { operationSecret: operationSecretSchema },
+} as const;
+export const completedAccountDeletionSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['status', 'deletedUserId', 'completedAt'],
+    properties: {
+        status: { const: 'completed', type: 'string' },
+        deletedUserId: { type: 'string' },
+        completedAt: { type: 'string', format: 'date-time' },
+    },
+} as const;
+export const accountDeletionStatusSchema = {
+    oneOf: [
+        completedAccountDeletionSchema,
+        {
+            type: 'object',
+            additionalProperties: false,
+            required: ['status'],
+            properties: { status: { const: 'unknown', type: 'string' } },
+        },
+    ],
+} as const;
+
+export function decodeAccountDeletionStatus(value: unknown): AccountDeletionStatus {
+    const payload = requiredRecord(value);
+    if (payload.status === 'unknown' && Object.keys(payload).length === 1) return { status: 'unknown' };
+    if (payload.status !== 'completed') throw new Error('Invalid deletion status.');
+    const completedAt = requiredString(payload, 'completedAt');
+    if (!Number.isFinite(Date.parse(completedAt)) || new Date(completedAt).toISOString() !== completedAt) {
+        throw new Error('Invalid deletion completion time.');
+    }
+    return {
+        status: 'completed',
+        deletedUserId: requiredString(payload, 'deletedUserId'),
+        completedAt,
+    };
+}

@@ -10,10 +10,11 @@
     "dev": "tsx src/server.ts",
     "build": "npm --prefix ../contracts run build && tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "db:purge-deletion-receipts": "tsx src/platform/postgres/purgeDeletionReceipts.ts",
     "db:migrate": "tsx src/platform/postgres/migrate.ts",
     "typecheck": "npm --prefix ../contracts run build && tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "npm --prefix ../contracts run build && DRIVECOST_DATA_DIR=.test-data node --import tsx --test --test-concurrency=1 'test/**/*.test.ts'",
-    "test:postgres": "npm --prefix ../contracts run build && npm run db:migrate && node --import tsx --test test/modules/auth/routes.postgres.test.ts",
+    "test:postgres": "npm --prefix ../contracts run build && npm run db:migrate && node --import tsx --test --test-concurrency=1 'test/**/*.postgres.test.ts'",
     "postgres:test:reset": "docker compose -f compose.test.yaml down --volumes --remove-orphans && docker compose -f compose.test.yaml up --detach --wait",
     "test:postgres:local": "npm run postgres:test:reset && DATABASE_URL=postgres://drivecost_test:drivecost-test-password@localhost:55432/drivecost_test npm run test:postgres",
     "lint": "oxlint --config .oxlintrc.json --max-warnings 0 ."

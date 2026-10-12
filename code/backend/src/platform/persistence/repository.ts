@@ -1,10 +1,18 @@
-import { AuthSessionRecord, SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
+import { AuthSessionRecord, DeletionReceipt, SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
 import { SyncEntityType } from '@drivecost/contracts';
 
 export type { SyncEntityType } from '@drivecost/contracts';
 
 export interface DriveCostRepository {
     initialize(): Promise<void>;
+    findDeletionReceipt(secretHash: string): Promise<DeletionReceipt | null>;
+    deleteAccount(
+        userId: string,
+        sessionId: string,
+        secretHash: string,
+        confirm: (user: UserRecord, session: AuthSessionRecord) => Promise<void>,
+    ): Promise<DeletionReceipt>;
+
     findUserByEmail(email: string): Promise<UserRecord | null>;
     findUserById(userId: string): Promise<UserRecord | null>;
     createUserWithSession(user: UserRecord, session: AuthSessionRecord): Promise<void>;

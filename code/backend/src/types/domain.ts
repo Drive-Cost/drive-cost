@@ -42,6 +42,8 @@ export type SyncedExpenseEntryRecord = SyncedRecord;
 export type SyncedRecurringExpenseRecord = SyncedRecord;
 
 export interface DatabaseShape {
+    deletionReceipts: DeletionReceipt[];
+    nextChangeSequence: number;
     users: UserRecord[];
     authSessions: AuthSessionRecord[];
     syncChanges: SyncChange[];
@@ -63,3 +65,10 @@ export interface SyncChange {
     payload: Record<string, unknown>;
     createdAt: string;
 }
+
+export type DeletionReceipt = {
+    secretHash: string;
+    deletedUserId: string;
+    completedAt: string;
+    expiresAt: string;
+};

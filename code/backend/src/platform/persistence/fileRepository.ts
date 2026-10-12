@@ -1,10 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
 import { Problems } from '../http/problemDetails';
 import crypto from 'node:crypto';
-import { ensureDatabase, readDatabase, upsertByClientId, writeDatabase } from '../../lib/fileDatabase';
+import { ensureDatabase, readDatabase, syncDatabaseDirectory, upsertByClientId, writeDatabase } from '../../lib/fileDatabase';
 import { SyncEntity, SyncOperation } from '@drivecost/contracts';
-import { AuthSessionRecord, DatabaseShape, SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
+import { AuthSessionRecord, DatabaseShape, DeletionReceipt, SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
 import { DriveCostRepository, SyncEntityType } from './repository';
+import { createDeletionReceipt } from './deletionReceipt';
 
 const collectionByEntityType: Record<
     SyncEntityType,
@@ -49,6 +50,7 @@ export class FileRepository implements DriveCostRepository {
 
     async createAuthSession(session: AuthSessionRecord): Promise<void> {
         const database = readDatabase();
+        requireUser(database, session.userId);
         database.authSessions.push(session);
         writeDatabase(database);
     }
@@ -132,6 +134,7 @@ export class FileRepository implements DriveCostRepository {
 
     async upsertEntity(userId: string, entityType: SyncEntityType, payload: object, createOnly = false): Promise<SyncedRecord | null> {
         const database = readDatabase();
+        requireUser(database, userId);
         const collection = this.collection(database, entityType);
         const { clientId: _clientId, ...attributes } = payload as Record<string, unknown>;
         const clientId = requiredClientId(payload);
@@ -153,7 +156,7 @@ export class FileRepository implements DriveCostRepository {
             payload,
         );
         database.syncChanges.push({
-            sequence: database.syncChanges.length + 1,
+            sequence: database.nextChangeSequence++,
             userId,
             entityType,
             operation: SyncOperation.Upsert,
@@ -172,6 +175,7 @@ export class FileRepository implements DriveCostRepository {
         clientId: string,
     ): Promise<void> {
         const database = readDatabase();
+        requireUser(database, userId);
         const collection = this.collection(database, entityType);
         const existingRecord = collection.find((record) => record.userId === userId && record.clientId === clientId);
         if (existingRecord?.deletedAt) {
@@ -181,7 +185,7 @@ export class FileRepository implements DriveCostRepository {
         const deletedAt = new Date().toISOString();
         const record = upsertByClientId(collection, idPrefixByEntityType[entityType], userId, { clientId, deletedAt });
         database.syncChanges.push({
-            sequence: database.syncChanges.length + 1,
+            sequence: database.nextChangeSequence++,
             userId,
             entityType,
             operation: SyncOperation.Delete,
@@ -195,6 +199,7 @@ export class FileRepository implements DriveCostRepository {
 
     async deleteVehicle(userId: string, clientId: string): Promise<void> {
         const database = readDatabase();
+        requireUser(database, userId);
         const deletedAt = new Date().toISOString();
         this.tombstone(database, userId, SyncEntity.Vehicle, clientId, deletedAt);
 
@@ -213,6 +218,50 @@ export class FileRepository implements DriveCostRepository {
             .syncChanges.filter((change) => change.userId === userId && change.sequence > after)
             .map((change) => ({ ...change, operation: change.operation ?? SyncOperation.Upsert }))
             .slice(0, limit);
+    }
+
+    async findDeletionReceipt(secretHash: string): Promise<DeletionReceipt | null> {
+        const database = readDatabase();
+        const retained = database.deletionReceipts.filter((receipt) => Date.parse(receipt.expiresAt) > Date.now());
+        if (retained.length !== database.deletionReceipts.length) {
+            database.deletionReceipts = retained;
+            writeDatabase(database);
+        }
+        const receipt = retained.find((candidate) => candidate.secretHash === secretHash) ?? null;
+        // Recovery must also complete durability after a post-rename sync failure.
+        if (receipt) syncDatabaseDirectory();
+        return receipt;
+    }
+
+    async deleteAccount(
+        userId: string, sessionId: string, secretHash: string,
+        confirm: (user: UserRecord, session: AuthSessionRecord) => Promise<void>,
+    ): Promise<DeletionReceipt> {
+        const snapshot = readDatabase();
+        const user = requireUser(snapshot, userId);
+        const session = requireLiveSession(snapshot, userId, sessionId);
+        await confirm(user, session);
+        // Password verification yields: re-read before the synchronous atomic commit.
+        const database = readDatabase();
+        const currentUser = requireUser(database, userId);
+        const currentSession = requireLiveSession(database, userId, sessionId);
+        if (!isDeepStrictEqual(currentUser, user) || !isDeepStrictEqual(currentSession, session)) {
+            throw Problems.deletionConfirmationFailed();
+        }
+        database.deletionReceipts = database.deletionReceipts.filter((receipt) => Date.parse(receipt.expiresAt) > Date.now());
+        if (database.deletionReceipts.some((receipt) => receipt.secretHash === secretHash)) {
+            throw Problems.deletionOperationConflict();
+        }
+        const receipt = createDeletionReceipt(secretHash, userId);
+        database.deletionReceipts.push(receipt);
+        database.users = database.users.filter((record) => record.id !== userId);
+        database.authSessions = database.authSessions.filter((record) => record.userId !== userId);
+        database.syncChanges = database.syncChanges.filter((record) => record.userId !== userId);
+        for (const collection of Object.values(collectionByEntityType)) {
+            database[collection] = database[collection].filter((record) => record.userId !== userId);
+        }
+        writeDatabase(database);
+        return receipt;
     }
 
     async close(): Promise<void> {}
@@ -234,7 +283,7 @@ export class FileRepository implements DriveCostRepository {
 
         const record = upsertByClientId(collection, idPrefixByEntityType[entityType], userId, { clientId, deletedAt });
         database.syncChanges.push({
-            sequence: database.syncChanges.length + 1,
+            sequence: database.nextChangeSequence++,
             userId,
             entityType,
             operation: SyncOperation.Delete,
@@ -266,4 +315,15 @@ function hashesEqual(left: string, right: string): boolean {
     const leftBuffer = Buffer.from(left, 'utf8');
     const rightBuffer = Buffer.from(right, 'utf8');
     return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function requireUser(database: DatabaseShape, userId: string): UserRecord {
+    const user = database.users.find((candidate) => candidate.id === userId);
+    if (!user) throw Problems.accountUnavailable();
+    return user;
+}
+function requireLiveSession(database: DatabaseShape, userId: string, sessionId: string): AuthSessionRecord {
+    const session = database.authSessions.find((candidate) => candidate.id === sessionId && candidate.userId === userId);
+    if (!session || session.revokedAt || Date.parse(session.expiresAt) <= Date.now()) throw Problems.unauthorized();
+    return session;
 }

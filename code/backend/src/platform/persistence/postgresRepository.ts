@@ -1,9 +1,10 @@
 import { Problems } from '../http/problemDetails';
 import postgres, { Sql, TransactionSql } from 'postgres';
 import { createId } from '../../lib/ids';
-import { AuthSessionRecord, SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
+import { AuthSessionRecord, DeletionReceipt, SyncChange, SyncedRecord, UserRecord } from '../../types/domain';
 import { DriveCostRepository, SyncEntityType } from './repository';
 import { SyncEntity, SyncOperation } from '@drivecost/contracts';
+import { createDeletionReceipt } from './deletionReceipt';
 
 interface EntityRow {
     id: string;
@@ -68,7 +69,10 @@ export class PostgresRepository implements DriveCostRepository {
     }
 
     async createAuthSession(session: AuthSessionRecord): Promise<void> {
-        await insertAuthSession(this.sql, session);
+        await this.sql.begin(async (transaction) => {
+            await requireAccountLock(transaction, session.userId);
+            await insertAuthSession(transaction, session);
+        });
     }
 
     async rotateAuthSession(
@@ -78,24 +82,28 @@ export class PostgresRepository implements DriveCostRepository {
         lastUsedAt: string,
         expiresAt: string,
     ): Promise<{ user: UserRecord; sessionId: string } | null> {
-        const [row] = await this.sql<SessionUserRow[]>`
-          WITH rotated AS (
-            UPDATE auth_sessions
-            SET refresh_token_hash = ${nextRefreshTokenHash},
-                last_used_at = ${lastUsedAt},
-                expires_at = ${expiresAt}
-            WHERE id = ${sessionId}
-              AND refresh_token_hash = ${currentRefreshTokenHash}
-              AND revoked_at IS NULL
-              AND expires_at > now()
-            RETURNING id, user_id
-          )
-          SELECT users.id, users.mode, users.email, users.password_hash, users.created_at,
-                 rotated.id AS session_id
-          FROM rotated
-          JOIN users ON users.id = rotated.user_id
-        `;
-        return row ? { user: toUserRecord(row), sessionId: row.sessionId } : null;
+        return this.sql.begin(async (transaction) => {
+            const [session] = await transaction<{ userId: string }[]>`SELECT user_id FROM auth_sessions WHERE id = ${sessionId}`;
+            if (!session || !(await lockAccount(transaction, session.userId))) return null;
+            const [row] = await transaction<SessionUserRow[]>`
+              WITH rotated AS (
+                UPDATE auth_sessions
+                SET refresh_token_hash = ${nextRefreshTokenHash},
+                    last_used_at = ${lastUsedAt},
+                    expires_at = ${expiresAt}
+                WHERE id = ${sessionId}
+                  AND refresh_token_hash = ${currentRefreshTokenHash}
+                  AND revoked_at IS NULL
+                  AND expires_at > clock_timestamp()
+                RETURNING id, user_id
+              )
+              SELECT users.id, users.mode, users.email, users.password_hash, users.created_at,
+                     rotated.id AS session_id
+              FROM rotated
+              JOIN users ON users.id = rotated.user_id
+            `;
+            return row ? { user: toUserRecord(row), sessionId: row.sessionId } : null;
+        });
     }
 
     async revokeAuthSession(sessionId: string, refreshTokenHash: string): Promise<void> {
@@ -116,6 +124,9 @@ export class PostgresRepository implements DriveCostRepository {
         nextSession: AuthSessionRecord,
     ): Promise<UserRecord | null> {
         return this.sql.begin(async (transaction) => {
+            const [active] = await transaction<UserRow[]>`SELECT id, mode, email, password_hash, created_at FROM users WHERE id = ${userId} FOR UPDATE`;
+            if (!active) return null;
+
             const [row] = await transaction<UserRow[]>`
               UPDATE users
               SET mode = 'registered', email = ${email}, password_hash = ${passwordHash}
@@ -167,6 +178,7 @@ export class PostgresRepository implements DriveCostRepository {
     async upsertEntity(userId: string, entityType: SyncEntityType, payload: object, createOnly = false): Promise<SyncedRecord | null> {
         const { clientId, attributes } = splitPayload(payload);
         return this.sql.begin(async (transaction) => {
+            await requireAccountLock(transaction, userId);
             if (entityType !== 'vehicle') {
                 const vehicleClientId = (attributes as { vehicleClientId?: unknown }).vehicleClientId;
                 if (typeof vehicleClientId !== 'string') throw new Error('A vehicle-owned sync entity requires a vehicle client ID.');
@@ -238,6 +250,7 @@ export class PostgresRepository implements DriveCostRepository {
         clientId: string,
     ): Promise<void> {
         await this.sql.begin(async (transaction) => {
+            await requireAccountLock(transaction, userId);
             const [row] = await transaction<EntityRow[]>`
         INSERT INTO sync_entities (id, user_id, entity_type, client_id, payload, deleted_at)
         VALUES (
@@ -264,6 +277,7 @@ export class PostgresRepository implements DriveCostRepository {
 
     async deleteVehicle(userId: string, clientId: string): Promise<void> {
         await this.sql.begin(async (transaction) => {
+            await requireAccountLock(transaction, userId);
             const vehicle = await tombstoneEntity(transaction, userId, SyncEntity.Vehicle, clientId);
             if (!vehicle) return;
 
@@ -299,6 +313,45 @@ export class PostgresRepository implements DriveCostRepository {
             sequence: toSafeCursor(row.sequence),
             createdAt: new Date(row.createdAt).toISOString(),
         }));
+    }
+
+    async findDeletionReceipt(secretHash: string): Promise<DeletionReceipt | null> {
+        await this.sql`DELETE FROM account_deletion_receipts WHERE expires_at <= clock_timestamp()`;
+        const [receipt] = await this.sql<ReceiptRow[]>`
+            SELECT secret_hash, deleted_user_id, completed_at, expires_at FROM account_deletion_receipts
+            WHERE secret_hash = ${secretHash} AND expires_at > clock_timestamp()
+        `;
+        return receipt ? toDeletionReceipt(receipt) : null;
+    }
+
+    async deleteAccount(
+        userId: string, sessionId: string, secretHash: string,
+        confirm: (user: UserRecord, session: AuthSessionRecord) => Promise<void>,
+    ): Promise<DeletionReceipt> {
+        return this.sql.begin(async (transaction) => {
+            const [user] = await transaction<UserRow[]>`
+                SELECT id, mode, email, password_hash, created_at FROM users WHERE id = ${userId} FOR UPDATE
+            `;
+            if (!user) throw Problems.accountUnavailable();
+            const [session] = await transaction<SessionRow[]>`
+                SELECT id, user_id, refresh_token_hash, created_at, last_used_at, expires_at, revoked_at
+                FROM auth_sessions WHERE id = ${sessionId} AND user_id = ${userId}
+                    AND revoked_at IS NULL AND expires_at > clock_timestamp() FOR UPDATE
+            `;
+            if (!session) throw Problems.unauthorized();
+            await confirm(toUserRecord(user), toAuthSession(session));
+            if (session.expiresAt.getTime() <= Date.now()) throw Problems.unauthorized();
+            const receipt = createDeletionReceipt(secretHash, userId);
+            await transaction`DELETE FROM account_deletion_receipts WHERE expires_at <= clock_timestamp()`;
+            const [inserted] = await transaction`
+                INSERT INTO account_deletion_receipts (secret_hash, deleted_user_id, completed_at, expires_at)
+                VALUES (${receipt.secretHash}, ${receipt.deletedUserId}, ${receipt.completedAt}, ${receipt.expiresAt})
+                ON CONFLICT (secret_hash) DO NOTHING RETURNING secret_hash
+            `;
+            if (!inserted) throw Problems.deletionOperationConflict();
+            await transaction`DELETE FROM users WHERE id = ${userId}`;
+            return receipt;
+        });
     }
 
     async close(): Promise<void> {
@@ -402,4 +455,31 @@ function toSyncedRecord(row: EntityRow): SyncedRecord {
         updatedAt: row.updatedAt.toISOString(),
         ...(row.deletedAt ? { deletedAt: row.deletedAt.toISOString() } : {}),
     };
+}
+
+type ReceiptRow = Omit<DeletionReceipt, 'completedAt' | 'expiresAt'> & { completedAt: Date; expiresAt: Date };
+type SessionRow = Omit<AuthSessionRecord, 'createdAt' | 'lastUsedAt' | 'expiresAt' | 'revokedAt'> & {
+    createdAt: Date;
+    lastUsedAt: Date;
+    expiresAt: Date;
+    revokedAt: Date | null;
+};
+function toAuthSession(row: SessionRow): AuthSessionRecord {
+    return {
+        ...row,
+        createdAt: row.createdAt.toISOString(),
+        lastUsedAt: row.lastUsedAt.toISOString(),
+        expiresAt: row.expiresAt.toISOString(),
+        ...(row.revokedAt ? { revokedAt: row.revokedAt.toISOString() } : { revokedAt: undefined }),
+    };
+}
+function toDeletionReceipt(row: ReceiptRow): DeletionReceipt {
+    return { ...row, completedAt: row.completedAt.toISOString(), expiresAt: row.expiresAt.toISOString() };
+}
+async function lockAccount(transaction: TransactionSql, userId: string): Promise<boolean> {
+    const [row] = await transaction`SELECT id FROM users WHERE id = ${userId} FOR KEY SHARE`;
+    return Boolean(row);
+}
+async function requireAccountLock(transaction: TransactionSql, userId: string): Promise<void> {
+    if (!(await lockAccount(transaction, userId))) throw Problems.accountUnavailable();
 }
