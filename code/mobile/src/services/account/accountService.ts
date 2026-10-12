@@ -1,3 +1,5 @@
+import { assertAccountContext, getDatasetGeneration, assertDatasetCurrent } from '../app/datasetContext';
+import { requireAccountLifecycleAvailable } from '../../database/syncStateRepository';
 import { bindSyncOwner, getSyncOwner } from '../../database/syncStateRepository';
 import { apiClient } from '../sync/apiClient';
 import { getMobileSession, persistMobileSession } from '../sync/authSession';
@@ -8,6 +10,9 @@ export { signIn, confirmAccountDataChoice, cancelSignIn, signOut } from './accou
 
 // These use cases preserve the dataset's existing owner; sync remains optional.
 export async function createAccount(email: string, password: string): Promise<void> {
+  assertAccountContext();
+  await requireAccountLifecycleAvailable();
+  const generation = getDatasetGeneration();
   const owner = await getSyncOwner();
   const current = getMobileSession();
   if (owner && (owner.mode !== 'guest' || current?.mode !== 'guest' || current.userId !== owner.userId)) {
@@ -20,6 +25,16 @@ export async function createAccount(email: string, password: string): Promise<vo
     await apiClient.logout(response.refreshToken);
     throw new AccountOwnershipError('This device contains DriveCost data linked to another account.');
   }
-  await bindSyncOwner({ userId: response.user.id, mode: response.user.mode });
+  try {
+    assertAccountContext();
+    assertDatasetCurrent(generation);
+    await requireAccountLifecycleAvailable();
+    assertAccountContext();
+    assertDatasetCurrent(generation);
+    await bindSyncOwner({ userId: response.user.id, mode: response.user.mode });
+  } catch (error) {
+    await apiClient.logout(response.refreshToken);
+    throw error;
+  }
   await persistMobileSession(response);
 }

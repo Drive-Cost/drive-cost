@@ -1,3 +1,4 @@
+import { getDatasetGeneration, assertDatasetCurrent } from '../services/app/datasetContext';
 import { createVehicleEntryLoader, mergeVehicleEntries } from './vehicleEntryLoader';
 import type { VehicleLoadStates } from './vehicleEntryLoader';
 import { deleteEntry } from '../services/entries/deleteEntry';
@@ -37,6 +38,7 @@ export const useExpenseStore = create<ExpenseState>(set => {
     loadStates: {},
     loadExpenseEntries: loader.load,
     createExpenseEntry: async entry => {
+      const dataset = getDatasetGeneration();
       const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.ExpenseEntry) };
       const result = await persistAndQueueSyncBatch(async (transaction, queue) => {
         const saved = await addExpenseEntry(entryToCreate, transaction);
@@ -44,20 +46,24 @@ export const useExpenseStore = create<ExpenseState>(set => {
         await queue(SyncEntity.ExpenseEntry, SyncOperation.Upsert, toExpenseEntrySyncPayload(saved, vehicleClientId));
         return { saved, entries: await getExpenseEntries(entry.vehicleId, transaction) };
       });
+      assertDatasetCurrent(dataset);
       loader.publish(entry.vehicleId, result.entries);
       return result.saved;
     },
     updateExpenseEntry: async entry => {
+      const dataset = getDatasetGeneration();
       const result = await persistAndQueueSyncBatch(async (transaction, queue) => {
         const saved = await updateExpenseEntry(entry, transaction);
         const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
         await queue(SyncEntity.ExpenseEntry, SyncOperation.Upsert, toExpenseEntrySyncPayload(saved, vehicleClientId));
         return { saved, entries: await getExpenseEntries(entry.vehicleId, transaction) };
       });
+      assertDatasetCurrent(dataset);
       loader.publish(entry.vehicleId, result.entries);
       return result.saved;
     },
     deleteExpenseEntry: async (entryId, vehicleId) => {
+      const dataset = getDatasetGeneration();
       const entries = await deleteEntry(
         SyncEntity.ExpenseEntry,
         entryId,
@@ -65,6 +71,7 @@ export const useExpenseStore = create<ExpenseState>(set => {
         deleteExpenseEntryById,
         getExpenseEntries
       );
+      assertDatasetCurrent(dataset);
       loader.publish(vehicleId, entries);
     },
   };

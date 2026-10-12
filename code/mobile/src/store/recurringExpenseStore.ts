@@ -1,3 +1,4 @@
+import { getDatasetGeneration, assertDatasetCurrent } from '../services/app/datasetContext';
 import { createVehicleEntryLoader, mergeVehicleEntries } from './vehicleEntryLoader';
 import type { VehicleLoadStates } from './vehicleEntryLoader';
 import { deleteEntry } from '../services/entries/deleteEntry';
@@ -39,6 +40,7 @@ export const useRecurringExpenseStore = create<RecurringExpenseState>(set => {
     loadStates: {},
     loadRecurringExpenses: loader.load,
     createRecurringExpense: async entry => {
+      const dataset = getDatasetGeneration();
       const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.RecurringExpense) };
       const result = await persistAndQueueSyncBatch(async (transaction, queue) => {
         const saved = await addRecurringExpense(entryToCreate, transaction);
@@ -50,10 +52,12 @@ export const useRecurringExpenseStore = create<RecurringExpenseState>(set => {
         );
         return { saved, entries: await getRecurringExpenses(entry.vehicleId, transaction) };
       });
+      assertDatasetCurrent(dataset);
       loader.publish(entry.vehicleId, result.entries);
       return result.saved;
     },
     updateRecurringExpense: async entry => {
+      const dataset = getDatasetGeneration();
       const result = await persistAndQueueSyncBatch(async (transaction, queue) => {
         const saved = await updateRecurringExpense(entry, transaction);
         const vehicleClientId = await requireVehicleClientId(entry.vehicleId, transaction);
@@ -64,10 +68,12 @@ export const useRecurringExpenseStore = create<RecurringExpenseState>(set => {
         );
         return { saved, entries: await getRecurringExpenses(entry.vehicleId, transaction) };
       });
+      assertDatasetCurrent(dataset);
       loader.publish(entry.vehicleId, result.entries);
       return result.saved;
     },
     setRecurringExpenseActive: async (id, vehicleId, active) => {
+      const dataset = getDatasetGeneration();
       const entries = await persistAndQueueSyncBatch(async (transaction, queue) => {
         await setRecurringExpenseActive(id, active, transaction);
         const snapshot = await getRecurringExpenses(vehicleId, transaction);
@@ -80,9 +86,11 @@ export const useRecurringExpenseStore = create<RecurringExpenseState>(set => {
         );
         return snapshot;
       });
+      assertDatasetCurrent(dataset);
       loader.publish(vehicleId, entries);
     },
     deleteRecurringExpense: async (id, vehicleId) => {
+      const dataset = getDatasetGeneration();
       const entries = await deleteEntry(
         SyncEntity.RecurringExpense,
         id,
@@ -90,6 +98,7 @@ export const useRecurringExpenseStore = create<RecurringExpenseState>(set => {
         deleteRecurringExpenseById,
         getRecurringExpenses
       );
+      assertDatasetCurrent(dataset);
       loader.publish(vehicleId, entries);
     },
   };

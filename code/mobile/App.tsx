@@ -1,3 +1,4 @@
+import { restoreAccountDeletion } from './src/services/account/accountDeletion';
 import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initDatabase } from './src/database/db';
@@ -31,6 +32,7 @@ export default function App() {
 
     async function bootstrap() {
       initDatabase();
+      await restoreAccountDeletion();
       await loadVehicles();
 
       try {

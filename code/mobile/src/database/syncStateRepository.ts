@@ -1,3 +1,4 @@
+import { assertAccountContext } from '../services/app/datasetContext';
 import * as SQLite from 'expo-sqlite';
 import { db } from './db';
 
@@ -24,6 +25,8 @@ export async function getSyncOwner(database: SQLite.SQLiteDatabase = db): Promis
 
 export async function bindSyncOwner(owner: SyncOwnerBinding, database?: SQLite.SQLiteDatabase): Promise<void> {
   const write = async (transaction: SQLite.SQLiteDatabase) => {
+    await requireAccountLifecycleAvailable(transaction);
+    assertAccountContext();
     await transaction.runAsync(
       `INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?), (?, ?)`,
       SYNC_OWNER_ID_KEY,
@@ -66,8 +69,38 @@ export async function isSessionBlocked(database: SQLite.SQLiteDatabase = db): Pr
 }
 
 export async function setSessionBlocked(blocked: boolean, database: SQLite.SQLiteDatabase = db): Promise<void> {
+  if (!blocked) await requireAccountLifecycleAvailable(database);
   await database.runAsync(
     "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('session_blocked', ?)",
     blocked ? '1' : '0'
   );
+}
+
+/** Independent of session_blocked: signing in may not override a deletion lifecycle. */
+export async function isAccountLifecycleBlocked(database: SQLite.SQLiteDatabase = db): Promise<boolean> {
+  return (await getAccountLifecycleBlock(database)) !== null;
+}
+export async function requireAccountLifecycleAvailable(database: SQLite.SQLiteDatabase = db): Promise<void> {
+  if (await isAccountLifecycleBlocked(database))
+    throw new Error('Resolve account deletion in Settings before connecting an account.');
+}
+
+export async function getAccountLifecycleBlock(
+  database: SQLite.SQLiteDatabase = db
+): Promise<'deletion-pending' | 'account-unavailable' | null> {
+  const row = await database.getFirstAsync<{ key: string }>(
+    "SELECT key FROM sync_state WHERE key IN ('account_deletion', 'account_unavailable') LIMIT 1"
+  );
+  return row ? (row.key === 'account_unavailable' ? 'account-unavailable' : 'deletion-pending') : null;
+}
+
+export async function markAccountUnavailable(ownerId: string): Promise<void> {
+  await db.withExclusiveTransactionAsync(async transaction => {
+    if ((await getSyncOwner(transaction))?.userId !== ownerId) return;
+    await transaction.runAsync(
+      "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('account_unavailable', ?)",
+      ownerId
+    );
+    await setSessionBlocked(true, transaction);
+  });
 }

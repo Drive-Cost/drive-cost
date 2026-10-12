@@ -7,6 +7,14 @@ type SyncStatusCardProps = {
 };
 
 const copyByPhase = {
+  'deletion-pending': {
+    title: 'Account deletion pending',
+    detail: 'Your records remain on this device. Check deletion in Settings. Syncing is paused.',
+  },
+  'account-unavailable': {
+    title: 'Account no longer available',
+    detail: 'Sync has stopped for this account. Your records remain on this device.',
+  },
   'local-only': {
     title: 'Local-only mode',
     detail: 'Your data is safely stored on this device.',
@@ -72,4 +80,6 @@ const styles = StyleSheet.create({
   error: { backgroundColor: '#fee2e2' },
   'auth-required': { backgroundColor: '#fef3c7' },
   'account-mismatch': { backgroundColor: '#fee2e2' },
+  'deletion-pending': { backgroundColor: '#fef3c7' },
+  'account-unavailable': { backgroundColor: '#fee2e2' },
 });

@@ -31,6 +31,7 @@ export const detailScreenHeaders: Record<Exclude<keyof RootStackParamList, 'Prim
   OwnershipExpenses: 'Ownership expenses',
   UpdateOdometer: 'Update odometer',
   CreateAccount: 'Create account',
+  DeleteAccount: 'Delete account',
   SignIn: 'Sign in',
   AccountDataChoice: 'Use your account',
 };

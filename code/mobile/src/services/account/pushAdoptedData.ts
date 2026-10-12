@@ -19,6 +19,7 @@ export async function pushAdoptedData(ownerId: string): Promise<boolean> {
     await db.withExclusiveTransactionAsync(async transaction => {
       if (!(await canSyncOwner(ownerId, transaction))) throw new AccountDataError('Sign in to resume sync.');
       await acknowledgeAccountAdoption(job, transaction);
+      if (!(await canSyncOwner(ownerId, transaction))) throw new AccountDataError('Sync is paused.');
     });
   }
   return true;

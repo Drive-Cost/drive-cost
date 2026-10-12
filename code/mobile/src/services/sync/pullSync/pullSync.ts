@@ -27,6 +27,7 @@ export async function pullRemoteChanges(ownerId: string): Promise<number> {
       db.withExclusiveTransactionAsync(async transaction => {
         if (!(await canSyncOwner(ownerId, transaction))) throw new Error('Sign in to resume sync.');
         await operation(transaction);
+        if (!(await canSyncOwner(ownerId, transaction))) throw new Error('Sync is paused.');
       }),
     applyChange,
     setCursor: (cursor, transaction) => setPullCursor(ownerId, cursor, transaction),

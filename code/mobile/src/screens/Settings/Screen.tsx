@@ -1,3 +1,4 @@
+import { useAccountDeletionStore } from '../../store/accountDeletionStore';
 import { signOut } from '../../services/account/accountService';
 import { useSubmissionGuard } from '../../hooks/useSubmissionGuard';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -17,10 +18,12 @@ import { initialState, reduce } from './reducer';
 
 export default function SettingsScreen() {
   const syncStatus = useSyncStore();
+  const deletion = useAccountDeletionStore(state => state.view);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [state, dispatch] = useReducer(reduce, initialState);
   const { owner } = state;
   const { session, status } = useAccountStore();
+  const lifecycleBlocked = status === 'deletion-pending' || status === 'account-unavailable';
   const matchingSession = status === 'authenticated' && session?.userId === owner?.userId ? session : null;
   const request = useRef(0);
   const [signOutState, setSignOutState] = useState<
@@ -70,7 +73,7 @@ export default function SettingsScreen() {
         <Text style={styles.title}>Settings</Text>
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Account</Text>
-          {signOutState.tag === 'error' ? (
+          {signOutState.tag === 'error' && !lifecycleBlocked ? (
             <View>
               <Text accessibilityLiveRegion="polite" style={styles.copy}>
                 {signOutState.message}
@@ -94,6 +97,24 @@ export default function SettingsScreen() {
               >
                 <Text style={styles.secondaryText}>Try again</Text>
               </Pressable>
+            </View>
+          ) : lifecycleBlocked ? (
+            <View style={styles.row}>
+              <Text style={styles.rowTitle}>
+                {status === 'account-unavailable' ? 'Account no longer available' : 'Account deletion pending'}
+              </Text>
+              <Text style={styles.copy}>Your records remain on this device. Syncing is paused.</Text>
+              {status !== 'account-unavailable' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  style={styles.secondaryAction}
+                  onPress={() => navigation.navigate('DeleteAccount')}
+                >
+                  <Text style={styles.secondaryText}>
+                    {deletion.tag === 'cleanup-pending' ? 'Retry device cleanup' : 'Review account deletion'}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : owner?.mode === 'guest' && matchingSession?.mode === 'guest' ? (
             <>
@@ -136,13 +157,23 @@ export default function SettingsScreen() {
             <>
               <View style={styles.row}>
                 <Text style={styles.rowTitle}>
-                  {owner.mode === 'registered' ? 'Signed out' : 'Sign in to resume sync'}
+                  {owner.mode === 'registered' ? 'Signed out' : 'Account access unavailable'}
                 </Text>
-                <Text style={styles.copy}>Your DriveCost data remains safely stored on this device.</Text>
+                <Text style={styles.copy}>
+                  {owner.mode === 'guest'
+                    ? 'Your records remain on this device. This older account needs its original credential to reconnect or be deleted.'
+                    : 'Your DriveCost data remains safely stored on this device.'}
+                </Text>
               </View>
-              <Pressable accessibilityRole="button" style={styles.action} onPress={() => navigation.navigate('SignIn')}>
-                <Text style={styles.actionText}>Sign in</Text>
-              </Pressable>
+              {owner.mode === 'registered' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  style={styles.action}
+                  onPress={() => navigation.navigate('SignIn')}
+                >
+                  <Text style={styles.actionText}>Sign in</Text>
+                </Pressable>
+              ) : null}
             </>
           ) : (
             <>
@@ -166,6 +197,15 @@ export default function SettingsScreen() {
               </Pressable>
             </>
           )}
+          {state.tag === 'ready' && owner && !lifecycleBlocked ? (
+            <Pressable
+              accessibilityRole="button"
+              style={styles.secondaryAction}
+              onPress={() => navigation.navigate('DeleteAccount')}
+            >
+              <Text style={styles.destructiveText}>Delete account</Text>
+            </Pressable>
+          ) : null}
         </View>
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>About</Text>
@@ -236,4 +276,5 @@ const styles = StyleSheet.create({
   actionText: { color: '#fff', fontWeight: '700' },
   secondaryAction: { marginTop: 8, padding: 12, alignItems: 'center' },
   secondaryText: { color: colors.text, fontWeight: '700' },
+  destructiveText: { color: colors.destructive, fontWeight: '700' },
 });

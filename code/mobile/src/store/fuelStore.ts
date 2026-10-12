@@ -1,3 +1,4 @@
+import { getDatasetGeneration, assertDatasetCurrent } from '../services/app/datasetContext';
 import { createVehicleEntryLoader, mergeVehicleEntries } from './vehicleEntryLoader';
 import type { VehicleLoadStates } from './vehicleEntryLoader';
 import { deleteEntry } from '../services/entries/deleteEntry';
@@ -33,6 +34,7 @@ export const useFuelStore = create<FuelState>(set => {
     loadFuelEntries: loader.load,
 
     createFuelEntry: async entry => {
+      const dataset = getDatasetGeneration();
       const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.FuelEntry) };
       const saved = await recordEntry(
         SyncEntity.FuelEntry,
@@ -41,12 +43,14 @@ export const useFuelStore = create<FuelState>(set => {
         getFuelEntries,
         toFuelEntrySyncPayload
       );
+      assertDatasetCurrent(dataset);
       loader.publish(entry.vehicleId, saved.entries);
       useVehicleStore.setState({ vehicles: saved.vehicles });
       return saved.entry;
     },
 
     updateFuelEntry: async entry => {
+      const dataset = getDatasetGeneration();
       const saved = await recordEntry(
         SyncEntity.FuelEntry,
         entry,
@@ -54,13 +58,16 @@ export const useFuelStore = create<FuelState>(set => {
         getFuelEntries,
         toFuelEntrySyncPayload
       );
+      assertDatasetCurrent(dataset);
       loader.publish(entry.vehicleId, saved.entries);
       useVehicleStore.setState({ vehicles: saved.vehicles });
       return saved.entry;
     },
 
     deleteFuelEntry: async (entryId, vehicleId) => {
+      const dataset = getDatasetGeneration();
       const entries = await deleteEntry(SyncEntity.FuelEntry, entryId, vehicleId, deleteFuelEntryById, getFuelEntries);
+      assertDatasetCurrent(dataset);
       loader.publish(vehicleId, entries);
     },
   };

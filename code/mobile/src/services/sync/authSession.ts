@@ -1,7 +1,20 @@
+import {
+  blockAccountContext,
+  releaseAccountContext,
+  isAccountContextBlocked,
+  getDatasetGeneration,
+  isDatasetCurrent,
+} from '../app/datasetContext';
 import * as SecureStore from 'expo-secure-store';
 import { useAccountStore } from '../../store/accountStore';
 import { SyncApiError, apiClient } from './apiClient';
-import { bindSyncOwner, getSyncOwner, isSessionBlocked } from '../../database/syncStateRepository';
+import {
+  bindSyncOwner,
+  getSyncOwner,
+  isSessionBlocked,
+  getAccountLifecycleBlock,
+  markAccountUnavailable,
+} from '../../database/syncStateRepository';
 import type { SessionResponse } from '../../domain/sync';
 
 const SESSION_KEY = 'drivecost.auth-session.v2';
@@ -17,7 +30,13 @@ export type MobileSession = {
   email?: string;
 };
 
-export type MobileSessionState = 'local-only' | 'authenticated' | 'reauth-required' | 'account-mismatch';
+export type MobileSessionState =
+  | 'local-only'
+  | 'authenticated'
+  | 'reauth-required'
+  | 'account-mismatch'
+  | 'deletion-pending'
+  | 'account-unavailable';
 
 let session: MobileSession | null = null;
 let state: MobileSessionState = 'local-only';
@@ -48,6 +67,10 @@ export function getMobileSessionState(): MobileSessionState {
 }
 
 export async function persistMobileSession(response: SessionResponse): Promise<MobileSession> {
+  const dataset = getDatasetGeneration();
+  if (isAccountContextBlocked() || (await getAccountLifecycleBlock()))
+    throw new Error('Resolve account deletion in Settings.');
+  if (!isDatasetCurrent(dataset) || isAccountContextBlocked()) throw new Error('Account context changed.');
   const next = parseSession({
     userId: response.user.id,
     mode: response.user.mode,
@@ -60,9 +83,11 @@ export async function persistMobileSession(response: SessionResponse): Promise<M
   const generation = ++sessionGeneration;
   pendingRotation = null;
   await writeSecureSession(async () => {
-    if (sessionGeneration === generation) await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next));
+    if (sessionGeneration === generation && !isAccountContextBlocked() && isDatasetCurrent(dataset))
+      await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next));
   });
-  if (sessionGeneration !== generation) return next;
+  if (sessionGeneration !== generation || isAccountContextBlocked() || (await getAccountLifecycleBlock()))
+    throw new Error('Account context changed.');
   session = next;
   apiClient.setAccessToken(next.accessToken);
   pendingRotation = null;
@@ -72,15 +97,25 @@ export async function persistMobileSession(response: SessionResponse): Promise<M
 }
 
 export async function initializeAuthSession(): Promise<MobileSessionState> {
+  const generation = sessionGeneration;
+  const blocked = await getAccountLifecycleBlock();
+  if (blocked) {
+    pauseAccountSession(blocked);
+    return state;
+  }
+  if (isAccountContextBlocked() || sessionGeneration !== generation) return state;
   if (!apiClient.isConfigured) return setLocalOnly();
   if (await isSessionBlocked()) {
     await clearSignedOutSession();
     return state;
   }
+  if (isAccountContextBlocked() || sessionGeneration !== generation) return state;
   if (state === 'reauth-required' && !session) return state;
   if (pendingRotation) await saveRotation();
+  if (isAccountContextBlocked() || sessionGeneration !== generation) return state;
   if (!session) {
     const restored = parseSession(await SecureStore.getItemAsync(SESSION_KEY));
+    if (isAccountContextBlocked() || sessionGeneration !== generation) return state;
     if (!restored) {
       await migrateLegacyAccessToken();
       publishSession();
@@ -91,6 +126,7 @@ export async function initializeAuthSession(): Promise<MobileSessionState> {
   const restored = session;
   apiClient.setAccessToken(restored.accessToken);
   const owner = await getSyncOwner();
+  if (isAccountContextBlocked() || sessionGeneration !== generation) return state;
   if (owner && owner.userId !== restored.userId) {
     state = 'account-mismatch';
     apiClient.setAccessToken(null);
@@ -100,6 +136,7 @@ export async function initializeAuthSession(): Promise<MobileSessionState> {
   if (owner?.mode === 'guest' && restored.mode === 'registered') {
     await bindSyncOwner({ userId: restored.userId, mode: restored.mode });
   }
+  if (isAccountContextBlocked() || sessionGeneration !== generation) return state;
   state = 'authenticated';
   publishSession();
   if (expiresSoon(restored.accessTokenExpiresAt)) await refreshAuthSession();
@@ -119,7 +156,7 @@ export async function clearAuthSession(): Promise<void> {
   session = null;
   pendingRotation = null;
   apiClient.setAccessToken(null);
-  state = 'reauth-required';
+  if (!isAccountContextBlocked()) state = 'reauth-required';
   publishSession();
   await writeSecureSession(() => SecureStore.deleteItemAsync(SESSION_KEY));
 }
@@ -145,6 +182,8 @@ async function saveRotation(): Promise<void> {
 }
 
 async function rotateSession(): Promise<boolean> {
+  if (isAccountContextBlocked() || (await getAccountLifecycleBlock())) return false;
+  if (isAccountContextBlocked()) return false;
   if (pendingRotation) {
     await saveRotation();
     return true;
@@ -272,3 +311,45 @@ function decodeLegacyIdentity(token: string): { userId: string; mode: 'guest' | 
 }
 
 apiClient.setRefreshHandler(refreshAuthSession);
+
+/** Fence refresh/persistence without deleting recoverable credentials during an unknown outcome. */
+export function pauseAccountSession(reason: 'deletion-pending' | 'account-unavailable'): void {
+  blockAccountContext();
+  sessionGeneration += 1;
+  pendingRotation = null;
+  apiClient.setAccessToken(null);
+  state = reason;
+  publishSession();
+}
+export function completeAccountDeletion(): void {
+  sessionGeneration += 1;
+  pendingRotation = null;
+  releaseAccountContext();
+  setLocalOnly();
+}
+apiClient.setUnavailableHandler(async token => {
+  if (!session || session.accessToken !== token || state !== 'authenticated') return;
+  const ownerId = session.userId;
+  pauseAccountSession('account-unavailable');
+  await markAccountUnavailable(ownerId);
+});
+
+/** Freeze new refreshes while an existing rotation finishes, retaining the live guest proof. */
+export async function pauseCurrentSessionForDeletion(): Promise<MobileSession> {
+  blockAccountContext();
+  try {
+    if (activeRefresh) await activeRefresh;
+    if (pendingRotation) await saveRotation();
+    if (!session || state !== 'authenticated') throw new Error('Sign in before deleting your account.');
+    const current = session;
+    pauseAccountSession('deletion-pending');
+    return current;
+  } catch (error) {
+    releaseAccountContext();
+    if (!session) {
+      state = 'reauth-required';
+      publishSession();
+    }
+    throw error;
+  }
+}

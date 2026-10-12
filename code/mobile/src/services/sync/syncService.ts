@@ -1,3 +1,5 @@
+import { getDatasetGeneration, isDatasetCurrent, isAccountContextBlocked } from '../app/datasetContext';
+import { db } from '../../database/db';
 import { pushAdoptedData } from '../account/pushAdoptedData';
 import { canSyncOwner } from './syncAccess';
 import {
@@ -38,35 +40,43 @@ function parseSyncPayload(payload: string): unknown {
 }
 
 async function syncQueue() {
+  const generation = getDatasetGeneration();
+  const update = (status: Partial<SyncStatus>) => {
+    if (isDatasetCurrent(generation)) publishStatus(status);
+  };
   const owner = await getSyncOwner();
   const session = getMobileSession();
   const boundary = resolveSyncBoundary(apiClient.isConfigured, owner, session, getMobileSessionState());
+  if (boundary === 'deletion-pending' || boundary === 'account-unavailable') {
+    update({ phase: boundary, error: null });
+    return;
+  }
   if (boundary === 'local-only' || !owner) {
-    syncStatus.update({ phase: 'local-only', error: null });
+    update({ phase: 'local-only', error: null });
     return;
   }
   if (boundary === 'account-mismatch') {
-    syncStatus.update({ phase: 'account-mismatch', error: null });
+    update({ phase: 'account-mismatch', error: null });
     return;
   }
   if (boundary === 'reauth-required' || !session || !apiClient.hasSession()) {
-    syncStatus.update({ phase: 'auth-required', error: null });
+    update({ phase: 'auth-required', error: null });
     return;
   }
 
   if (!(await canSyncOwner(owner.userId))) {
-    syncStatus.update({ phase: 'auth-required', error: null });
+    update({ phase: 'auth-required', error: null });
     return;
   }
-  syncStatus.update({ phase: 'syncing', error: null });
+  update({ phase: 'syncing', error: null });
   try {
     if (!(await pushAdoptedData(owner.userId))) {
-      syncStatus.update({ phase: 'auth-required', error: null });
+      update({ phase: 'auth-required', error: null });
       return;
     }
   } catch (error) {
     if (!(await canSyncOwner(owner.userId))) {
-      syncStatus.update({ phase: 'auth-required', error: null });
+      update({ phase: 'auth-required', error: null });
       return;
     }
     throw error;
@@ -81,16 +91,30 @@ async function syncQueue() {
 
     try {
       if (!(await canSyncOwner(owner.userId))) {
-        syncStatus.update({ phase: 'auth-required', error: null });
+        update({ phase: 'auth-required', error: null });
         return;
       }
       await syncJob(job);
       if (!(await canSyncOwner(owner.userId))) {
-        syncStatus.update({ phase: 'auth-required', error: null });
+        update({ phase: 'auth-required', error: null });
         return;
       }
-      await deleteSyncJob(jobId);
+      await db.withExclusiveTransactionAsync(async transaction => {
+        if (!isDatasetCurrent(generation) || !(await canSyncOwner(owner.userId, transaction))) return;
+        await deleteSyncJob(jobId, transaction);
+        if (!isDatasetCurrent(generation) || !(await canSyncOwner(owner.userId, transaction))) {
+          throw new Error('Sync is paused.');
+        }
+      });
     } catch (error) {
+      if (!isDatasetCurrent(generation)) return;
+      if (!(await canSyncOwner(owner.userId))) {
+        update({
+          phase: getMobileSessionState() === 'account-mismatch' ? 'account-mismatch' : 'auth-required',
+          error: null,
+        });
+        return;
+      }
       const message = error instanceof Error ? error.message : 'Unknown sync error';
       await markSyncJobError({ id: jobId, retryCount: job.retryCount }, message);
 
@@ -100,11 +124,11 @@ async function syncQueue() {
   }
 
   if (getMobileSessionState() === 'reauth-required') {
-    syncStatus.update({ phase: 'auth-required', error: null });
+    update({ phase: 'auth-required', error: null });
     return;
   }
   if (getMobileSessionState() === 'account-mismatch') {
-    syncStatus.update({ phase: 'account-mismatch', error: null });
+    update({ phase: 'account-mismatch', error: null });
     return;
   }
 
@@ -113,15 +137,16 @@ async function syncQueue() {
     appliedChanges = await pullRemoteChanges(owner.userId);
   } catch (error) {
     if (getMobileSessionState() === 'reauth-required') {
-      syncStatus.update({ phase: 'auth-required', error: null });
+      update({ phase: 'auth-required', error: null });
       return;
     }
     if (getMobileSessionState() === 'account-mismatch') {
-      syncStatus.update({ phase: 'account-mismatch', error: null });
+      update({ phase: 'account-mismatch', error: null });
       return;
     }
     throw error;
   }
+  if (!isDatasetCurrent(generation) || !(await canSyncOwner(owner.userId))) return;
   if (appliedChanges > 0) {
     await Promise.all([...remoteChangeListeners].map(listener => listener(appliedChanges)));
   }
@@ -131,10 +156,10 @@ async function syncQueue() {
   if (pendingError !== null) throw new Error(pendingError);
 
   if (!(await canSyncOwner(owner.userId))) {
-    syncStatus.update({ phase: 'auth-required', error: null });
+    update({ phase: 'auth-required', error: null });
     return;
   }
-  syncStatus.update({ phase: 'synced', lastSyncedAt: new Date().toISOString(), error: null });
+  update({ phase: 'synced', lastSyncedAt: new Date().toISOString(), error: null });
 }
 
 export function subscribeToRemoteChanges(listener: (appliedChanges: number) => Promise<void>): () => void {
@@ -147,10 +172,11 @@ export function subscribeToSyncStatus(listener: (status: SyncStatus) => void): (
 }
 
 export function showSignedOut(): void {
-  syncStatus.update({ phase: 'auth-required', error: null });
+  publishStatus({ phase: 'auth-required', error: null });
 }
 
 export async function syncDevice(): Promise<void> {
+  await (await import('../account/accountDeletion')).restoreAccountDeletion();
   try {
     await initializeAuthSession();
   } catch {
@@ -165,11 +191,29 @@ export function processSyncQueue(): Promise<void> {
 }
 
 const syncScheduler = createSyncScheduler(async () => {
+  const generation = getDatasetGeneration();
   try {
     await syncQueue();
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown sync error';
-    syncStatus.update({ phase: 'error', error: message });
+    if (isDatasetCurrent(generation)) publishStatus({ phase: 'error', error: message });
     throw error;
   }
 });
+
+function publishStatus(status: Partial<SyncStatus>): void {
+  if (isAccountContextBlocked()) {
+    syncStatus.update({
+      phase: getMobileSessionState() === 'account-unavailable' ? 'account-unavailable' : 'deletion-pending',
+      error: null,
+    });
+    return;
+  }
+  syncStatus.update(status);
+}
+export function showAccountDeletion(): void {
+  publishStatus({ phase: 'deletion-pending', error: null });
+}
+export function showLocalOnly(): void {
+  syncStatus.update({ phase: 'local-only', error: null, lastSyncedAt: null });
+}

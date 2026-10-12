@@ -1,3 +1,4 @@
+import { getDatasetGeneration, assertDatasetCurrent, isDatasetCurrent } from '../services/app/datasetContext';
 import type { CreateVehicleInput, UpdateVehicleInput } from '../models/Vehicle';
 import { create } from 'zustand';
 import { Vehicle } from '../models/Vehicle';
@@ -33,7 +34,9 @@ export const useVehicleStore = create<VehicleState>(set => ({
   activeVehicleId: null,
 
   loadVehicles: async () => {
+    const dataset = getDatasetGeneration();
     const vehicles = await getVehicles();
+    if (!isDatasetCurrent(dataset)) return;
 
     set(state => ({
       vehicles,
@@ -45,22 +48,26 @@ export const useVehicleStore = create<VehicleState>(set => ({
   },
 
   createVehicle: async vehicle => {
+    const dataset = getDatasetGeneration();
     const input = initializeVehicleTrackingStartDate({ ...vehicle, clientId: createClientId(SyncEntity.Vehicle) });
     const result = await persistAndQueueSyncBatch(async (transaction, queue) => {
       const saved = await addVehicle(input, transaction);
       await queue(SyncEntity.Vehicle, SyncOperation.Upsert, toVehicleSyncPayload(saved));
       return { saved, vehicles: await getVehicles(transaction) };
     });
+    assertDatasetCurrent(dataset);
     set({ vehicles: result.vehicles, activeVehicleId: result.saved.id });
     return result.saved;
   },
 
   saveVehicle: async vehicle => {
+    const dataset = getDatasetGeneration();
     const result = await persistAndQueueSyncBatch(async (transaction, queue) => {
       const saved = await updateVehicle(vehicle, transaction);
       await queue(SyncEntity.Vehicle, SyncOperation.Upsert, toVehicleSyncPayload(saved));
       return { saved, vehicles: await getVehicles(transaction) };
     });
+    assertDatasetCurrent(dataset);
     set(state => ({ vehicles: result.vehicles, activeVehicleId: state.activeVehicleId ?? result.saved.id }));
     return result.saved;
   },
@@ -68,16 +75,19 @@ export const useVehicleStore = create<VehicleState>(set => ({
   setActiveVehicle: id => set({ activeVehicleId: id }),
 
   syncVehicleOdometer: async (vehicleId, odometer) => {
+    const dataset = getDatasetGeneration();
     const vehicles = await persistAndQueueSyncBatch(async (transaction, queue) => {
       await updateVehicleCurrentOdometer(vehicleId, odometer, transaction);
       const updated = await requireVehicleForSync(vehicleId, transaction);
       await queue(SyncEntity.Vehicle, SyncOperation.Upsert, toVehicleSyncPayload(updated));
       return getVehicles(transaction);
     });
+    assertDatasetCurrent(dataset);
     set(state => ({ vehicles, activeVehicleId: state.activeVehicleId ?? vehicleId }));
   },
 
   deleteVehicle: async vehicleId => {
+    const dataset = getDatasetGeneration();
     const vehicles = await persistAndQueueSyncBatch(async (transaction, queue) => {
       const vehicle = await requireVehicleForSync(vehicleId, transaction);
       await removePendingVehicleUpserts(vehicle.clientId, transaction);
@@ -85,6 +95,7 @@ export const useVehicleStore = create<VehicleState>(set => ({
       await queue(SyncEntity.Vehicle, SyncOperation.Delete, { clientId: vehicle.clientId });
       return getVehicles(transaction);
     });
+    assertDatasetCurrent(dataset);
     set(state => ({
       vehicles,
       activeVehicleId: state.activeVehicleId === vehicleId ? (vehicles[0]?.id ?? null) : state.activeVehicleId,

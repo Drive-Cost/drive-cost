@@ -23,6 +23,7 @@ export type RootStackParamList = {
   OwnershipExpenses: undefined;
   UpdateOdometer: undefined;
   CreateAccount: undefined;
+  DeleteAccount: undefined;
   SignIn: undefined;
   AccountDataChoice: { attemptId: number; email: string; vehicleCount: number; recordCount: number };
 };

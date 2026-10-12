@@ -77,8 +77,8 @@ export async function getPendingSyncError(): Promise<string | null> {
   return job?.lastError ?? null;
 }
 
-export const deleteSyncJob = async (jobId: number): Promise<void> => {
-  await db.runAsync(`DELETE FROM sync_queue WHERE id = ?`, jobId);
+export const deleteSyncJob = async (jobId: number, database: SQLite.SQLiteDatabase = db): Promise<void> => {
+  await database.runAsync(`DELETE FROM sync_queue WHERE id = ?`, jobId);
 };
 
 export const markSyncJobError = async (

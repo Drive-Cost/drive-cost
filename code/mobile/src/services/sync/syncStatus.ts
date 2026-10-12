@@ -5,7 +5,9 @@ export type SyncPhase =
   | 'synced'
   | 'error'
   | 'auth-required'
-  | 'account-mismatch';
+  | 'account-mismatch'
+  | 'deletion-pending'
+  | 'account-unavailable';
 
 export type SyncStatus = {
   phase: SyncPhase;

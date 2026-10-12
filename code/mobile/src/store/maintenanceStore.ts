@@ -1,3 +1,4 @@
+import { getDatasetGeneration, assertDatasetCurrent } from '../services/app/datasetContext';
 import { createVehicleEntryLoader, mergeVehicleEntries } from './vehicleEntryLoader';
 import type { VehicleLoadStates } from './vehicleEntryLoader';
 import { deleteEntry } from '../services/entries/deleteEntry';
@@ -39,6 +40,7 @@ export const useMaintenanceStore = create<MaintenanceState>(set => {
     loadMaintenanceEntries: loader.load,
 
     createMaintenanceEntry: async entry => {
+      const dataset = getDatasetGeneration();
       const entryToCreate = { ...entry, clientId: createClientId(SyncEntity.MaintenanceEntry) };
       const saved = await recordEntry(
         SyncEntity.MaintenanceEntry,
@@ -47,12 +49,14 @@ export const useMaintenanceStore = create<MaintenanceState>(set => {
         getMaintenanceEntries,
         toMaintenanceEntrySyncPayload
       );
+      assertDatasetCurrent(dataset);
       loader.publish(entry.vehicleId, saved.entries);
       useVehicleStore.setState({ vehicles: saved.vehicles });
       return saved.entry;
     },
 
     updateMaintenanceEntry: async entry => {
+      const dataset = getDatasetGeneration();
       const saved = await recordEntry(
         SyncEntity.MaintenanceEntry,
         entry,
@@ -60,12 +64,14 @@ export const useMaintenanceStore = create<MaintenanceState>(set => {
         getMaintenanceEntries,
         toMaintenanceEntrySyncPayload
       );
+      assertDatasetCurrent(dataset);
       loader.publish(entry.vehicleId, saved.entries);
       useVehicleStore.setState({ vehicles: saved.vehicles });
       return saved.entry;
     },
 
     deleteMaintenanceEntry: async (entryId, vehicleId) => {
+      const dataset = getDatasetGeneration();
       const entries = await deleteEntry(
         SyncEntity.MaintenanceEntry,
         entryId,
@@ -73,6 +79,7 @@ export const useMaintenanceStore = create<MaintenanceState>(set => {
         deleteMaintenanceEntryById,
         getMaintenanceEntries
       );
+      assertDatasetCurrent(dataset);
       loader.publish(vehicleId, entries);
     },
   };

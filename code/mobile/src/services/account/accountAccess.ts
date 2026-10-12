@@ -1,3 +1,10 @@
+import {
+  assertAccountContext,
+  getDatasetGeneration,
+  isDatasetCurrent,
+  assertDatasetCurrent,
+} from '../app/datasetContext';
+import { requireAccountLifecycleAvailable } from '../../database/syncStateRepository';
 import { db } from '../../database/db';
 import {
   readAccountDataset,
@@ -34,6 +41,7 @@ export type AccountDataChoice = { kind: 'add' } | { kind: 'replace'; confirmed: 
 
 type PendingSignIn = {
   id: number;
+  generation: number;
   response: SessionResponse;
   dataset: AccountDataset;
   stage: 'choosing' | 'committed' | 'activated';
@@ -49,12 +57,16 @@ function revoke(response: Pick<SessionResponse, 'refreshToken'>) {
   void apiClient.logout(response.refreshToken).catch(() => undefined);
 }
 function assertCurrent(choice: PendingSignIn) {
-  if (choice.cancelled || pending !== choice)
+  assertAccountContext();
+  if (!isDatasetCurrent(choice.generation) || choice.cancelled || pending !== choice)
     throw new AccountDataError('Sign-in was cancelled. Your device data is safe.');
 }
 
 export async function signIn(email: string, password: string, signal?: AbortSignal): Promise<SignInResult> {
+  assertAccountContext();
+  await requireAccountLifecycleAvailable();
   if (pending) cancelSignIn(pending.id);
+  const generation = getDatasetGeneration();
   const id = ++attempt;
   const onAbort = () => {
     if (attempt === id) attempt += 1;
@@ -68,7 +80,7 @@ export async function signIn(email: string, password: string, signal?: AbortSign
     signal?.removeEventListener('abort', onAbort);
     throw error;
   }
-  if (id !== attempt || signal?.aborted) {
+  if (!isDatasetCurrent(generation) || id !== attempt || signal?.aborted) {
     signal?.removeEventListener('abort', onAbort);
     revoke(response);
     throw new AccountDataError('Sign-in was cancelled.');
@@ -81,6 +93,8 @@ export async function signIn(email: string, password: string, signal?: AbortSign
   let dataset: AccountDataset | undefined;
   try {
     await db.withExclusiveTransactionAsync(async transaction => {
+      assertAccountContext();
+      await requireAccountLifecycleAvailable(transaction);
       dataset = await readAccountDataset(transaction);
     });
     if (id !== attempt || signal?.aborted) throw new AccountDataError('Sign-in was cancelled.');
@@ -95,10 +109,19 @@ export async function signIn(email: string, password: string, signal?: AbortSign
         await setSessionBlocked(true, transaction);
       });
       if (id !== attempt || signal?.aborted) throw new AccountDataError('Sign-in was cancelled.');
-      await activate(response);
+      await activate(response, undefined, generation);
       return { tag: 'signed-in' };
     }
-    pending = { id, response, dataset, cancelled: false, stage: 'choosing', working: false, decision: null };
+    pending = {
+      id,
+      generation,
+      response,
+      dataset,
+      cancelled: false,
+      stage: 'choosing',
+      working: false,
+      decision: null,
+    };
     if (dataset.entities.length === 0 && dataset.pending.length === 0) {
       await confirmAccountDataChoice(id, { kind: 'replace', confirmed: true });
       return { tag: 'signed-in' };
@@ -118,10 +141,20 @@ export async function signIn(email: string, password: string, signal?: AbortSign
   }
 }
 
-async function activate(response: SessionResponse, choice?: PendingSignIn): Promise<void> {
+async function activate(
+  response: SessionResponse,
+  choice?: PendingSignIn,
+  generation = choice?.generation ?? getDatasetGeneration()
+): Promise<void> {
+  assertAccountContext();
+  await requireAccountLifecycleAvailable();
+  assertAccountContext();
+  assertDatasetCurrent(generation);
   if (choice) assertCurrent(choice);
   await persistMobileSession(response);
+  assertDatasetCurrent(generation);
   await db.withExclusiveTransactionAsync(async transaction => {
+    assertDatasetCurrent(generation);
     if (choice) assertCurrent(choice);
     if ((await getSyncOwner(transaction))?.userId !== response.user.id)
       throw new AccountOwnershipError(mismatchMessage);
@@ -210,6 +243,8 @@ export function cancelSignIn(id: number): void {
 }
 
 export async function signOut(): Promise<void> {
+  assertAccountContext();
+  await requireAccountLifecycleAvailable();
   const owner = await getSyncOwner();
   if (!owner || owner.mode !== 'registered')
     throw new AccountOwnershipError('Sign out is available for your registered account.');

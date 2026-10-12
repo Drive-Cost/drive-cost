@@ -14,6 +14,7 @@ import SettingsScreen from '../screens/Settings/Screen';
 import UpdateOdometerScreen from '../screens/UpdateOdometer/Screen';
 import CreateAccountScreen from '../screens/CreateAccount/Screen';
 import AccountDataChoiceScreen from '../screens/AccountDataChoice/Screen';
+import DeleteAccountScreen from '../screens/DeleteAccount/Screen';
 import SignInScreen from '../screens/SignIn/Screen';
 import GarageStack from './GarageStack';
 import { detailScreenHeaders, primaryTabShell, primaryTabsUseNavigationHeaders } from './navigationShell';
@@ -126,6 +127,7 @@ export default function AppNavigator() {
         component={AccountDataChoiceScreen}
         options={{ title: 'Use your account' }}
       />
+      <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} options={{ title: 'Delete account' }} />
       <Stack.Screen name="SignIn" component={SignInScreen} options={{ title: 'Sign in' }} />
     </Stack.Navigator>
   );

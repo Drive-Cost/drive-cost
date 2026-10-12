@@ -1,3 +1,4 @@
+import { getDatasetGeneration, isDatasetCurrent } from '../services/app/datasetContext';
 export type LoadState = { tag: 'loading' } | { tag: 'ready' } | { tag: 'error' };
 export type VehicleLoadStates = Partial<Record<number, LoadState>>;
 
@@ -23,15 +24,16 @@ export function createVehicleEntryLoader<Entry>(
   };
   return {
     load: async (vehicleId: number): Promise<void> => {
+      const dataset = getDatasetGeneration();
       const generation = advance(vehicleId);
       status(vehicleId, { tag: 'loading' });
       try {
         const entries = await read(vehicleId);
-        if (generations.get(vehicleId) !== generation) return;
+        if (!isDatasetCurrent(dataset) || generations.get(vehicleId) !== generation) return;
         commit(vehicleId, entries);
         status(vehicleId, { tag: 'ready' });
       } catch {
-        if (generations.get(vehicleId) === generation) status(vehicleId, { tag: 'error' });
+        if (isDatasetCurrent(dataset) && generations.get(vehicleId) === generation) status(vehicleId, { tag: 'error' });
       }
     },
     publish: (vehicleId: number, entries: Entry[]) => {
