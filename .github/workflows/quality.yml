@@ -1,4 +1,4 @@
-name: Quality
+name: drive-cost continuous check
 
 on:
   pull_request:
