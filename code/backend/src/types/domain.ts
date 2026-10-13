@@ -1,37 +1,37 @@
 import type { SyncEntityType, SyncOperationByEntity } from '@drivecost/contracts';
 
 export interface UserRecord {
-    id: string;
-    mode: 'guest' | 'registered';
-    email?: string;
-    passwordHash?: string;
-    createdAt: string;
+  id: string;
+  mode: 'guest' | 'registered';
+  email?: string;
+  passwordHash?: string;
+  createdAt: string;
 }
 
 export interface AuthSessionRecord {
-    id: string;
-    userId: string;
-    refreshTokenHash: string;
-    createdAt: string;
-    lastUsedAt: string;
-    expiresAt: string;
-    revokedAt?: string;
+  id: string;
+  userId: string;
+  refreshTokenHash: string;
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  revokedAt?: string;
 }
 
 export interface AuthenticatedUser {
-    sub: string;
-    mode: UserRecord['mode'];
-    sid: string;
+  sub: string;
+  mode: UserRecord['mode'];
+  sid: string;
 }
 
 export interface SyncedRecord {
-    id: string;
-    clientId: string;
-    userId: string;
-    createdAt: string;
-    updatedAt: string;
-    deletedAt?: string;
-    [key: string]: unknown;
+  id: string;
+  clientId: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+  [key: string]: unknown;
 }
 
 export type SyncedVehicleRecord = SyncedRecord;
@@ -42,33 +42,33 @@ export type SyncedExpenseEntryRecord = SyncedRecord;
 export type SyncedRecurringExpenseRecord = SyncedRecord;
 
 export interface DatabaseShape {
-    deletionReceipts: DeletionReceipt[];
-    nextChangeSequence: number;
-    users: UserRecord[];
-    authSessions: AuthSessionRecord[];
-    syncChanges: SyncChange[];
-    vehicles: SyncedVehicleRecord[];
-    fuelEntries: SyncedFuelEntryRecord[];
-    chargingEntries: SyncedChargingEntryRecord[];
-    maintenanceEntries: SyncedMaintenanceEntryRecord[];
-    expenseEntries: SyncedExpenseEntryRecord[];
-    recurringExpenses: SyncedRecurringExpenseRecord[];
+  deletionReceipts: DeletionReceipt[];
+  nextChangeSequence: number;
+  users: UserRecord[];
+  authSessions: AuthSessionRecord[];
+  syncChanges: SyncChange[];
+  vehicles: SyncedVehicleRecord[];
+  fuelEntries: SyncedFuelEntryRecord[];
+  chargingEntries: SyncedChargingEntryRecord[];
+  maintenanceEntries: SyncedMaintenanceEntryRecord[];
+  expenseEntries: SyncedExpenseEntryRecord[];
+  recurringExpenses: SyncedRecurringExpenseRecord[];
 }
 
 export interface SyncChange {
-    sequence: number;
-    userId: string;
-    entityType: SyncEntityType;
-    operation: SyncOperationByEntity[SyncEntityType];
-    entityId: string;
-    clientId: string;
-    payload: Record<string, unknown>;
-    createdAt: string;
+  sequence: number;
+  userId: string;
+  entityType: SyncEntityType;
+  operation: SyncOperationByEntity[SyncEntityType];
+  entityId: string;
+  clientId: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
 }
 
 export type DeletionReceipt = {
-    secretHash: string;
-    deletedUserId: string;
-    completedAt: string;
-    expiresAt: string;
+  secretHash: string;
+  deletedUserId: string;
+  completedAt: string;
+  expiresAt: string;
 };

@@ -17,7 +17,8 @@
     "test:postgres": "npm --prefix ../contracts run build && npm run db:migrate && node --import tsx --test --test-concurrency=1 'test/**/*.postgres.test.ts'",
     "postgres:test:reset": "docker compose -f compose.test.yaml down --volumes --remove-orphans && docker compose -f compose.test.yaml up --detach --wait",
     "test:postgres:local": "npm run postgres:test:reset && DATABASE_URL=postgres://drivecost_test:drivecost-test-password@localhost:55432/drivecost_test npm run test:postgres",
-    "lint": "oxlint --config .oxlintrc.json --max-warnings 0 ."
+    "lint": "oxlint --config .oxlintrc.json --max-warnings 0 .",
+    "check-style": "prettier --check src"
   },
   "dependencies": {
     "@drivecost/contracts": "file:../contracts",
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "oxlint": "1.87.0",
+    "prettier": "^3.9.10",
     "tsx": "^4.20.0",
     "typescript": "^7.0.2"
   }
